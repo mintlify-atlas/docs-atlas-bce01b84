@@ -1,0 +1,182 @@
+---
+title: "Text-to-Speech with RVC Voice Conversion"
+sidebarTitle: "TTS"
+description: "Use Applio's TTS pipeline to synthesize speech with Microsoft Edge TTS, then apply RVC voice conversion to match a target voice model."
+---
+
+Applio's TTS feature combines two distinct systems to give you fully synthetic speech in any trained voice: first, Microsoft Edge TTS (via the `edge-tts` library) converts your text to natural-sounding speech using one of hundreds of neural voices, then the output WAV is immediately passed through the standard RVC inference pipeline to re-voice it using your chosen `.pth` model. The final result is an audio file that sounds like the target model speaker saying your text. Both the intermediate TTS audio and the final RVC-converted audio are saved separately, so you can inspect or use either one.
+
+<Note>
+The TTS voice list is fetched from the Bing TTS endpoint (`https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list`) and cached locally in `rvc/lib/tools/tts_voices.json`. This file ships with Applio and is loaded at startup via `load_voices_data()` in `core.py`. The `ShortName` field of each voice entry (e.g. `en-US-AriaNeural`) is what you pass as `tts_voice`.
+</Note>
+
+## How the Pipeline Works
+
+<Steps>
+  <Step title="Text to Speech (Edge TTS)">
+    Applio calls `rvc/lib/tools/tts.py` as a subprocess, passing your text (or a UTF-8 text file), the selected Edge TTS voice short name, and a speech rate adjustment. Edge TTS synthesises a WAV file and saves it to `output_tts_path` (default: `assets/audios/tts_output.wav`). If a file already exists at that path it is deleted first.
+  </Step>
+  <Step title="Voice Conversion (RVC)">
+    The synthesised WAV is fed directly into `VoiceConverter.convert_audio()` — exactly the same function used by single-file inference. The converted audio is saved to `output_rvc_path` (default: `assets/audios/tts_rvc_output.wav`).
+  </Step>
+</Steps>
+
+## Parameters
+
+<ParamField path="tts_text" type="str">
+  The text string to synthesise. Used when you type directly in the "Text to Speech" tab. Mutually exclusive with `tts_file` — if both are provided, `tts_file` takes precedence when a valid path is given.
+</ParamField>
+
+<ParamField path="tts_file" type="str">
+  Path to a UTF-8 encoded `.txt` file containing the text to synthesise. The full file content is passed to Edge TTS. The file must be UTF-8; other encodings will cause an error.
+</ParamField>
+
+<ParamField path="tts_voice" type="str" required>
+  The Edge TTS voice short name to use for synthesis (e.g. `en-US-AriaNeural`, `es-ES-AlvaroNeural`, `ja-JP-NanamiNeural`). The complete list of available voice short names is loaded from `rvc/lib/tools/tts_voices.json` at startup.
+</ParamField>
+
+<ParamField path="tts_rate" type="int" default="0">
+  Adjusts the Edge TTS speech rate as a percentage relative to the voice's normal speed. The range is **-100 to +100**. A value of `0` uses the default speed; `-50` speaks at half speed; `+50` speeds up by 50%.
+</ParamField>
+
+<ParamField path="output_tts_path" type="str" default="assets/audios/tts_output.wav">
+  Path where the intermediate Edge TTS audio is saved before RVC conversion.
+</ParamField>
+
+<ParamField path="output_rvc_path" type="str" default="assets/audios/tts_rvc_output.wav">
+  Path where the final RVC-converted audio is saved.
+</ParamField>
+
+<ParamField path="pth_path" type="str" required>
+  Path to the `.pth` model file used for voice conversion.
+</ParamField>
+
+<ParamField path="index_path" type="str" required>
+  Path to the `.index` file paired with the model.
+</ParamField>
+
+<ParamField path="pitch" type="int" default="0">
+  Pitch shift in semitones applied during the RVC conversion step (-24 to +24).
+</ParamField>
+
+<ParamField path="f0_method" type="str" default="rmvpe">
+  Pitch extraction algorithm for the RVC conversion step. Choices: `crepe`, `crepe-tiny`, `rmvpe`, `fcpe`.
+</ParamField>
+
+<ParamField path="index_rate" type="float" default="0.75">
+  Index file influence during RVC conversion (0.0–1.0). The TTS tab defaults to `0.75` (higher than the standard inference default of `0.3`) because synthesised speech is clean and benefits from stronger index guidance.
+</ParamField>
+
+<ParamField path="volume_envelope" type="float" default="1.0">
+  Volume envelope blending for the RVC output (0.0–1.0).
+</ParamField>
+
+<ParamField path="protect" type="float" default="0.5">
+  Consonant and breath protection level for RVC conversion (0.0–0.5). The TTS tab defaults to `0.5` (maximum protection) since synthesised TTS speech is already clean.
+</ParamField>
+
+<ParamField path="split_audio" type="bool" default="false">
+  Whether to split the TTS output into chunks before RVC conversion. Useful for long texts.
+</ParamField>
+
+<ParamField path="f0_autotune" type="bool" default="false">
+  Apply autotune to the RVC output. Useful when converting song lyrics via TTS.
+</ParamField>
+
+<ParamField path="clean_audio" type="bool" default="false">
+  Apply noise reduction to the final RVC output.
+</ParamField>
+
+<ParamField path="clean_strength" type="float" default="0.5">
+  Noise reduction intensity (0.0–1.0).
+</ParamField>
+
+<ParamField path="export_format" type="str" default="WAV">
+  Output audio format. Choices: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A`.
+</ParamField>
+
+<ParamField path="embedder_model" type="str" default="contentvec">
+  Speaker-embedding model for the RVC conversion step. Must match the embedder used when training the model. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`.
+</ParamField>
+
+<ParamField path="sid" type="int" default="0">
+  Speaker ID for multi-speaker models.
+</ParamField>
+
+## CLI Example
+
+```bash
+python core.py tts \
+  --tts_text "Hello, this is a test." \
+  --tts_voice en-US-AriaNeural \
+  --tts_rate 0 \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --output_tts_path assets/audios/tts_output.wav \
+  --output_rvc_path assets/audios/rvc_output.wav \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.75 \
+  --volume_envelope 1.0 \
+  --protect 0.5 \
+  --export_format WAV \
+  --embedder_model contentvec \
+  --clean_audio False
+```
+
+To use a text file instead of inline text:
+
+```bash
+python core.py tts \
+  --tts_file path/to/my_script.txt \
+  --tts_voice en-GB-SoniaNeural \
+  --tts_rate -10 \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --output_tts_path assets/audios/tts_output.wav \
+  --output_rvc_path assets/audios/rvc_output.wav
+```
+
+## Python API
+
+```python
+from core import run_tts_script
+
+message, output_path = run_tts_script(
+    tts_file="",                    # set to a file path, or leave empty to use tts_text
+    tts_text="Hello, this is a test.",
+    tts_voice="en-US-AriaNeural",
+    tts_rate=0,
+    pitch=0,
+    index_rate=0.75,
+    volume_envelope=1.0,
+    protect=0.5,
+    f0_method="rmvpe",
+    output_tts_path="assets/audios/tts_output.wav",
+    output_rvc_path="assets/audios/rvc_output.wav",
+    pth_path="logs/MyModel/MyModel.pth",
+    index_path="logs/MyModel/MyModel.index",
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=False,
+    clean_strength=0.5,
+    export_format="WAV",
+    embedder_model="contentvec",
+    embedder_model_custom=None,
+    sid=0,
+)
+
+print(message)      # "Text Hello, this is a test. synthesized successfully."
+print(output_path)  # "assets/audios/rvc_output.wav"
+```
+
+<Tip>
+You can find all available voice short names by inspecting the `ShortName` field in `rvc/lib/tools/tts_voices.json`. The file contains hundreds of voices across dozens of languages and locales. Pass any `ShortName` value directly to `--tts_voice` or the `tts_voice` parameter.
+</Tip>
+
+<Warning>
+Text files passed via `tts_file` must be UTF-8 encoded. Non-UTF-8 files will fail to load and the conversion will not start. The Gradio UI will display a warning if encoding detection fails.
+</Warning>

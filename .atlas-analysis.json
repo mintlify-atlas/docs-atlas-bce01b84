@@ -1,0 +1,114 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Applio",
+  "projectDescription": "A high-quality, open-source voice conversion tool built on RVC (Retrieval-Based Voice Conversion) with a Gradio UI, CLI, real-time conversion, TTS pipeline, model training, and plugin support.",
+  "theme": "almond",
+  "primaryColor": "#848484",
+  "lightColor": "#140c0c",
+  "darkColor": "#cfcfcf",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/inference",
+              "features/training",
+              "features/tts",
+              "features/realtime",
+              "features/voice-blender"
+            ]
+          },
+          {
+            "group": "Advanced Usage",
+            "pages": [
+              "advanced/post-processing",
+              "advanced/embedder-models",
+              "advanced/plugins",
+              "advanced/tensorboard"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/overview",
+              "cli/infer",
+              "cli/train",
+              "cli/tts",
+              "cli/utilities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "High-quality voice conversion using Retrieval-Based Voice Conversion (RVC)",
+    "Gradio web UI with tabbed interface (Inference, Training, TTS, Real-time, Voice Blender)",
+    "CLI interface via core.py for scriptable, headless operations",
+    "Real-time voice conversion with low-latency audio callbacks",
+    "Text-to-speech pipeline using Edge TTS combined with RVC voice conversion",
+    "Model training pipeline: preprocess → extract features → train → generate index",
+    "Voice Blender for fusing two RVC models at a configurable ratio",
+    "Post-processing effects: reverb, chorus, distortion, compressor, delay, bitcrush, limiter, gain, pitch shift, clipping",
+    "Multiple F0 pitch extraction algorithms: rmvpe, crepe, crepe-tiny, fcpe, hybrid modes",
+    "Multiple speaker embedder models: contentvec, spin, spin-v2, multilingual HuBERT variants, custom",
+    "Plugin system for extending functionality via zip-installable plugins",
+    "Docker and docker-compose support for containerized deployment",
+    "Overtraining detector to prevent overfitting during model training",
+    "Support for multiple vocoder options including HiFi-GAN",
+    "Formant shifting for timbre manipulation",
+    "Internationalization (i18n) with 30+ language support"
+  ],
+  "publicApiSurface": [
+    "run_infer_script(pitch, index_rate, volume_envelope, protect, f0_method, input_path, output_path, pth_path, index_path, ...)",
+    "run_batch_infer_script(pitch, index_rate, volume_envelope, protect, f0_method, input_folder, output_folder, pth_path, index_path, ...)",
+    "run_tts_script(tts_file, tts_text, tts_voice, tts_rate, pitch, index_rate, ..., pth_path, index_path, ...)",
+    "run_preprocess_script(model_name, dataset_path, sample_rate, cpu_cores, cut_preprocess, process_effects, noise_reduction, ...)",
+    "run_extract_script(model_name, f0_method, cpu_cores, gpu, sample_rate, embedder_model, ...)",
+    "run_train_script(model_name, save_every_epoch, save_only_latest, total_epoch, sample_rate, batch_size, gpu, ...)",
+    "run_index_script(model_name, index_algorithm)",
+    "run_model_blender_script(model_name, pth_path_1, pth_path_2, ratio)",
+    "run_model_information_script(pth_path)",
+    "run_download_script(model_link)",
+    "run_audio_analyzer_script(input_path, save_plot_path)",
+    "run_tensorboard_script()",
+    "run_prerequisites_script(pretraineds_hifigan, models, exe)",
+    "VoiceConverter.convert_audio(**kwargs)",
+    "VoiceConverter.convert_audio_batch(**kwargs)",
+    "VoiceConverter.load_hubert(embedder_model, embedder_model_custom)",
+    "CLI: python core.py infer --pitch --f0_method --input_path --output_path --pth_path --index_path [...]",
+    "CLI: python core.py batch_infer --input_folder --output_folder --pth_path --index_path [...]",
+    "CLI: python core.py tts --tts_text --tts_voice --pth_path --index_path [...]",
+    "CLI: python core.py preprocess --model_name --dataset_path --sample_rate [...]",
+    "CLI: python core.py extract --model_name --f0_method --gpu [...]",
+    "CLI: python core.py train --model_name --total_epoch --batch_size --gpu [...]",
+    "CLI: python core.py index --model_name --index_algorithm",
+    "CLI: python core.py model_blender --pth_path_1 --pth_path_2 --ratio",
+    "CLI: python core.py download --model_link",
+    "CLI: python core.py tensorboard",
+    "CLI: python core.py audio_analyzer --input_path"
+  ]
+}

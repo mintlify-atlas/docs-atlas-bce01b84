@@ -1,0 +1,360 @@
+---
+title: "applio infer: Single and Batch Voice Conversion"
+sidebarTitle: "infer"
+description: "Run voice conversion on a single audio file or a folder of files using core.py infer and batch_infer. Full parameter reference with defaults."
+---
+
+The `infer` and `batch_infer` subcommands are the core of Applio's voice-conversion pipeline. `infer` processes a single input audio file and writes one converted output file, while `batch_infer` accepts a folder path and converts every audio file inside it in a single run. Both subcommands share an identical set of conversion flags; only the path arguments differ. All audio quality, pitch, effects, and embedding settings described below apply to both unless otherwise noted.
+
+## infer — single file
+
+Use `infer` when you want to convert one audio clip and inspect the result before committing to a full batch run, or when your workflow processes files one at a time.
+
+### Required flags
+
+<ParamField path="--input_path" type="string" required>
+  Full path to the input audio file to be converted.
+</ParamField>
+
+<ParamField path="--output_path" type="string" required>
+  Full path where the converted audio file will be saved. The file extension in this path should match `--export_format`.
+</ParamField>
+
+<ParamField path="--pth_path" type="string" required>
+  Full path to the trained RVC model file (`.pth`).
+</ParamField>
+
+<ParamField path="--index_path" type="string" required>
+  Full path to the FAISS index file (`.index`) that accompanies the model.
+</ParamField>
+
+### Pitch and voice quality
+
+<ParamField path="--pitch" type="integer" default="0">
+  Pitch shift in semitones. Accepted range: `-24` to `24`. Positive values raise the pitch; negative values lower it. Use this to adapt a model trained on a different register to the target pitch.
+</ParamField>
+
+<ParamField path="--index_rate" type="float" default="0.3">
+  Controls how strongly the FAISS index influences the output. Range: `0.0`–`1.0`. Higher values produce voice characteristics closer to the training data; lower values reduce index-related artifacts at the cost of some accuracy.
+</ParamField>
+
+<ParamField path="--volume_envelope" type="float" default="1.0">
+  Blends the output's volume envelope with the input's. A value of `1.0` applies the output envelope fully. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--protect" type="float" default="0.33">
+  Protects consonants and breath sounds from conversion artifacts. Range: `0.0`–`0.5`. A value of `0.5` applies maximum protection; lower values reduce protection but can also reduce the indexing effect on those sounds.
+</ParamField>
+
+<ParamField path="--f0_method" type="string" default="rmvpe">
+  Pitch-extraction algorithm. Choices: `crepe`, `crepe-tiny`, `rmvpe`, `fcpe`, `hybrid[crepe+rmvpe]`, `hybrid[crepe+fcpe]`, `hybrid[rmvpe+fcpe]`, `hybrid[crepe+rmvpe+fcpe]`. `rmvpe` is recommended for most use cases; `crepe` variants may handle some voices better at the cost of speed; hybrid modes combine multiple extractors.
+</ParamField>
+
+<ParamField path="--sid" type="integer" default="0">
+  Speaker ID for multi-speaker models. For single-speaker models this should remain `0`.
+</ParamField>
+
+### Audio processing
+
+<ParamField path="--split_audio" type="boolean" default="False">
+  Split the input into smaller segments before inference. Recommended for long recordings (several minutes or more) to reduce memory usage and improve quality at segment boundaries. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--f0_autotune" type="boolean" default="False">
+  Apply a light autotune to the converted output. Particularly useful for singing voice conversion. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--f0_autotune_strength" type="float" default="1.0">
+  Strength of the autotune snap to the chromatic grid. Range: `0.0`–`1.0`. Only active when `--f0_autotune True`.
+</ParamField>
+
+<ParamField path="--proposed_pitch" type="boolean" default="False">
+  Enable proposed pitch adjustment mode. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--proposed_pitch_threshold" type="float" default="155.0">
+  Threshold frequency (Hz) for the proposed pitch adjustment. Range: `50`–`1199`. Only active when `--proposed_pitch True`.
+</ParamField>
+
+<ParamField path="--clean_audio" type="boolean" default="False">
+  Run a noise-reduction pass on the output audio. Recommended for speech conversions. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--clean_strength" type="float" default="0.7">
+  Intensity of the noise-reduction pass. Range: `0.0`–`1.0`. Higher values produce a cleaner but potentially more compressed output. Only active when `--clean_audio True`.
+</ParamField>
+
+<ParamField path="--export_format" type="string" default="WAV">
+  Output file format. Choices: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A`.
+</ParamField>
+
+### Embedder model
+
+<ParamField path="--embedder_model" type="string" default="contentvec">
+  Speaker-embedding model used during inference. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`. Language-specific HuBERT models can improve quality for non-English voices.
+</ParamField>
+
+<ParamField path="--embedder_model_custom" type="string" default="None">
+  Path to a custom embedding model directory. Only used when `--embedder_model custom`.
+</ParamField>
+
+### Formant shifting
+
+<ParamField path="--formant_shifting" type="boolean" default="False">
+  Apply formant shifting to the input before conversion. This adjusts vocal tract resonances independently of pitch and can be useful for more convincing gender conversions. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--formant_qfrency" type="float" default="1.0">
+  Quefrency factor for the formant shifting effect. Higher values produce a more pronounced shift. Only active when `--formant_shifting True`.
+</ParamField>
+
+<ParamField path="--formant_timbre" type="float" default="1.0">
+  Timbre factor for the formant shifting effect. Higher values produce a more pronounced timbre change. Only active when `--formant_shifting True`.
+</ParamField>
+
+### Post-processing effects
+
+All post-processing effects are inactive by default. Enable the `--post_process True` master switch first, then enable individual effects.
+
+<ParamField path="--post_process" type="boolean" default="False">
+  Enable the post-processing effects chain. When `False`, all effect flags below are ignored. Accepts `True` or `False`.
+</ParamField>
+
+**Reverb**
+
+<ParamField path="--reverb" type="boolean" default="False">
+  Enable reverb on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--reverb_room_size" type="float" default="0.5">
+  Simulated room size for the reverb. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--reverb_damping" type="float" default="0.5">
+  High-frequency damping of the reverb tail. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--reverb_wet_gain" type="float" default="0.5">
+  Level of the wet (reverb) signal. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--reverb_dry_gain" type="float" default="0.5">
+  Level of the dry (direct) signal mixed with reverb. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--reverb_width" type="float" default="0.5">
+  Stereo width of the reverb. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--reverb_freeze_mode" type="float" default="0.5">
+  Controls how much the reverb tail is frozen / infinitely sustained. Range: `0.0`–`1.0`.
+</ParamField>
+
+**Pitch shift (post-processing)**
+
+<ParamField path="--pitch_shift" type="boolean" default="False">
+  Enable a secondary pitch shift applied after conversion. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--pitch_shift_semitones" type="float" default="0.0">
+  Amount of post-processing pitch shift in semitones. Positive values increase pitch, negative values decrease it.
+</ParamField>
+
+**Limiter**
+
+<ParamField path="--limiter" type="boolean" default="False">
+  Enable a brickwall limiter on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--limiter_threshold" type="float" default="-6">
+  Limiter ceiling in dBFS. Output will not exceed this level.
+</ParamField>
+
+<ParamField path="--limiter_release_time" type="float" default="0.01">
+  Limiter release time in seconds.
+</ParamField>
+
+**Gain**
+
+<ParamField path="--gain" type="boolean" default="False">
+  Enable a gain stage on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--gain_db" type="float" default="0.0">
+  Gain to apply in dB. Positive values amplify; negative values attenuate.
+</ParamField>
+
+**Distortion**
+
+<ParamField path="--distortion" type="boolean" default="False">
+  Enable distortion on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--distortion_gain" type="float" default="25">
+  Drive amount for the distortion effect. Higher values produce more saturation.
+</ParamField>
+
+**Chorus**
+
+<ParamField path="--chorus" type="boolean" default="False">
+  Enable chorus on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--chorus_rate" type="float" default="1.0">
+  LFO rate of the chorus in Hz.
+</ParamField>
+
+<ParamField path="--chorus_depth" type="float" default="0.25">
+  Modulation depth of the chorus.
+</ParamField>
+
+<ParamField path="--chorus_center_delay" type="float" default="7">
+  Center delay time of the chorus in milliseconds.
+</ParamField>
+
+<ParamField path="--chorus_feedback" type="float" default="0.0">
+  Feedback amount of the chorus. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--chorus_mix" type="float" default="0.5">
+  Wet/dry mix of the chorus. Range: `0.0`–`1.0`.
+</ParamField>
+
+**Bitcrush**
+
+<ParamField path="--bitcrush" type="boolean" default="False">
+  Enable bit-depth reduction on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--bitcrush_bit_depth" type="integer" default="8">
+  Target bit depth for the bitcrush effect. Lower values produce a more degraded sound.
+</ParamField>
+
+**Clipping**
+
+<ParamField path="--clipping" type="boolean" default="False">
+  Enable hard clipping on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--clipping_threshold" type="float" default="-6">
+  Clipping ceiling in dBFS. Samples exceeding this threshold are hard-clipped.
+</ParamField>
+
+**Compressor**
+
+<ParamField path="--compressor" type="boolean" default="False">
+  Enable dynamic range compression on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--compressor_threshold" type="float" default="0">
+  Threshold in dBFS above which compression is applied.
+</ParamField>
+
+<ParamField path="--compressor_ratio" type="float" default="1">
+  Compression ratio (input dB : output dB above threshold). A value of `4` means 4:1 compression.
+</ParamField>
+
+<ParamField path="--compressor_attack" type="float" default="1.0">
+  Compressor attack time in milliseconds.
+</ParamField>
+
+<ParamField path="--compressor_release" type="float" default="100">
+  Compressor release time in milliseconds.
+</ParamField>
+
+**Delay**
+
+<ParamField path="--delay" type="boolean" default="False">
+  Enable a delay (echo) effect on the output. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--delay_seconds" type="float" default="0.5">
+  Delay time in seconds.
+</ParamField>
+
+<ParamField path="--delay_feedback" type="float" default="0.0">
+  Feedback amount for the delay; controls how many echoes repeat. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="--delay_mix" type="float" default="0.5">
+  Wet/dry mix for the delay. Range: `0.0`–`1.0`.
+</ParamField>
+
+---
+
+## batch_infer — folder of files
+
+`batch_infer` accepts a folder path for input and a folder path for output, then converts every audio file found in the input folder. All conversion flags are identical to `infer`.
+
+### batch_infer–specific flags
+
+<ParamField path="--input_folder" type="string" required>
+  Path to the folder containing the audio files to convert.
+</ParamField>
+
+<ParamField path="--output_folder" type="string" required>
+  Path to the folder where converted audio files will be saved. The folder will be created if it does not exist.
+</ParamField>
+
+All other flags (`--pth_path`, `--index_path`, `--pitch`, `--f0_method`, etc.) are identical to the `infer` subcommand and carry the same defaults.
+
+<Note>
+  `batch_infer` does not have `--input_path` or `--output_path`; those are replaced by `--input_folder` and `--output_folder`.
+</Note>
+
+---
+
+## Usage examples
+
+### Single-file conversion
+
+```bash
+python core.py infer \
+  --input_path audio/recording.wav \
+  --output_path audio/converted.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.3 \
+  --export_format WAV
+```
+
+### Single-file conversion with post-processing
+
+```bash
+python core.py infer \
+  --input_path audio/recording.wav \
+  --output_path audio/converted_with_fx.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --pitch 2 \
+  --f0_method rmvpe \
+  --split_audio True \
+  --clean_audio True \
+  --clean_strength 0.5 \
+  --post_process True \
+  --reverb True \
+  --reverb_room_size 0.4 \
+  --reverb_wet_gain 0.3 \
+  --reverb_dry_gain 0.7 \
+  --export_format FLAC
+```
+
+### Batch conversion
+
+```bash
+python core.py batch_infer \
+  --input_folder audio/raw_clips/ \
+  --output_folder audio/converted_clips/ \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.3 \
+  --export_format WAV
+```
+
+<Tip>
+  For large batches, enable `--split_audio True` to reduce memory pressure on long files and `--clean_audio True` to automatically reduce noise in the output clips.
+</Tip>

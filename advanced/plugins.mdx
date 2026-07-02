@@ -1,0 +1,124 @@
+---
+title: "Extend Applio with Plugins"
+sidebarTitle: "Plugins"
+description: "Install and build plugins for Applio to add new tabs, tools, and functionality. Plugins are ZIP archives that integrate directly into the Gradio UI."
+---
+
+Applio's plugin system lets you extend the web UI with entirely new tabs — without modifying any of Applio's core files. Each plugin is a self-contained Python package distributed as a `.zip` archive. When installed, Applio extracts the archive, automatically installs any declared dependencies, and surfaces the plugin as a new tab in the Gradio interface on next launch. This makes it straightforward to add community tools, custom workflows, or experimental features alongside the built-in inference, training, and TTS tabs.
+
+<Warning>
+  Plugins run in the **same Python process** as Applio and have unrestricted access to your filesystem, GPU, and network. Only install plugins from sources you trust.
+</Warning>
+
+## Installing a Plugin
+
+<Steps>
+  <Step title="Open the Plugins tab">
+    Start Applio and navigate to the **Plugins** tab in the web UI. You will see the **Plugin Installer** panel with a file dropbox.
+  </Step>
+
+  <Step title="Drop the plugin archive">
+    Drag and drop your `.zip` plugin file onto the **"Drag your plugin.zip to install it"** dropbox. Applio validates that the file is a `.zip` archive and rejects anything else.
+  </Step>
+
+  <Step title="Wait for installation">
+    Applio extracts the archive into `tabs/plugins/installed/<plugin_name>/`. If the plugin includes a `requirements.txt` file, the dependencies are installed automatically via `pip` before the UI restarts.
+  </Step>
+
+  <Step title="Find your new tab">
+    After the automatic restart, your plugin appears as a new tab in the Gradio UI, labelled with the plugin's folder name.
+  </Step>
+</Steps>
+
+<Note>
+  Applio restarts automatically after installing a plugin to load the new tab. Any in-progress inference or training jobs will be interrupted.
+</Note>
+
+## Plugin Directory Layout
+
+After installation, each plugin lives at:
+
+```
+tabs/
+└── plugins/
+    └── installed/
+        └── my_plugin/
+            ├── plugin.py          # Required entry point
+            └── requirements.txt   # Optional — installed automatically
+```
+
+The folder name (derived from the `.zip` filename) is used as the tab label in the UI.
+
+## Plugin Entry Point
+
+Every plugin must contain a file called `plugin.py` at the top level of the extracted folder. This file must define a function named `applio_plugin()` that builds the Gradio UI components for the tab. Applio calls this function inside a `gr.TabItem` context, so everything you render appears inside your plugin's tab.
+
+```python
+import gradio as gr
+
+def applio_plugin():
+    gr.Markdown("## My Plugin")
+    gr.Button("Do something")
+```
+
+The function receives no arguments and its return value is ignored — all UI is built through Gradio's context-manager side effects.
+
+## Example Plugin Structure
+
+A minimal plugin distributed as `my_plugin.zip` should unzip to the following layout:
+
+```
+my_plugin.zip
+└── my_plugin/
+    ├── plugin.py
+    └── requirements.txt   # optional
+```
+
+A more complete `plugin.py` example demonstrating interactive components:
+
+```python
+import gradio as gr
+
+def applio_plugin():
+    gr.Markdown("## My Custom Tool")
+    gr.Markdown("This plugin adds a custom processing step to Applio.")
+
+    with gr.Row():
+        input_audio = gr.Audio(label="Input Audio", type="filepath")
+        output_audio = gr.Audio(label="Output Audio")
+
+    def process(audio_path):
+        # Your custom processing logic here
+        return audio_path
+
+    run_btn = gr.Button("Run", variant="primary")
+    run_btn.click(fn=process, inputs=[input_audio], outputs=[output_audio])
+```
+
+## Plugin Discovery at Startup
+
+When Applio starts, `plugins_core.check_new_folders()` scans the `tabs/plugins/installed/` directory and compares its contents against the list of previously known plugins stored in `assets/config.json`. Any newly discovered plugin folders trigger dependency installation and an automatic restart. This means you can also install a plugin by manually extracting a folder into the `installed/` directory — Applio will detect it on the next launch.
+
+## Optional: Plugin Dependencies
+
+If your plugin requires third-party Python packages, include a `requirements.txt` at the top of the plugin folder:
+
+```
+# requirements.txt
+my-library==1.2.3
+another-package>=0.5
+```
+
+Applio will run `pip install -r requirements.txt` from the plugin directory before restarting. The packages are installed into the same virtual environment that Applio itself uses.
+
+## Community Plugins
+
+The official collection of community-maintained plugins is hosted at:
+
+**[https://github.com/IAHispano/Applio-Plugins](https://github.com/IAHispano/Applio-Plugins)**
+
+Browse that repository to find ready-to-install `.zip` archives contributed by the community.
+
+<Tip>
+  When building a plugin, prefix any file paths with `os.getcwd()` rather than hardcoding relative paths. Applio's working directory is always the repository root, so `os.path.join(os.getcwd(), "logs")` will reliably resolve to the correct `logs/` folder regardless of where the plugin itself is installed.
+</Tip>

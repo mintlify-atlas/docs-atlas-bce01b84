@@ -1,47 +1,170 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Applio Voice Conversion"
+sidebarTitle: "Quickstart"
+description: "Run your first voice conversion with Applio in five minutes using the web UI or CLI. Covers model download, inference, and output formats."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+Once Applio is installed, performing your first voice conversion takes only a few minutes. You need two things before you start: a source audio file (the voice you want to transform) and an RVC model (the target voice you want to convert to). Applio can download models directly from URLs through its built-in Download tab, so you do not need to manage files manually. This guide walks through the complete process using both the Gradio web UI and the command-line interface.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+## Model Files
 
-## Prerequisites
+Every RVC voice conversion requires two model files, both stored under `logs/<model_name>/` inside your Applio directory:
 
-Before you begin, you must have:
+| File | Extension | Purpose |
+|---|---|---|
+| Model weights | `.pth` | The trained neural network that encodes the target speaker's voice |
+| Feature index | `.index` | A FAISS index of training embeddings used to refine the conversion |
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+Both files are required. The index file controls how closely the output tracks the training data; if you only have a `.pth` file, set `--index_rate 0` to skip index retrieval.
 
-## Get started
+## Path 1: Web UI
+
+The web UI is the recommended starting point for new users. It exposes all inference parameters through interactive controls and provides an audio player for immediate preview of your output.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Start Applio">
+    Launch Applio with the run script for your platform:
 
-    ```bash
-    npm install your-package
-    ```
+    <Tabs>
+      <Tab title="Windows">
+        ```bat
+        run-applio.bat
+        ```
+      </Tab>
+      <Tab title="Linux / macOS">
+        ```bash
+        ./run-applio.sh
+        ```
+      </Tab>
+    </Tabs>
+
+    Applio starts a local Gradio server and opens your default browser at `http://127.0.0.1:6969`. Wait for the interface to fully load before proceeding — the first launch downloads prerequisite model files and may take a minute or two.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
+  <Step title="Download a voice model">
+    Navigate to the **Download** tab. Paste a direct URL to a `.pth` file (or a `.zip` archive containing a `.pth` and `.index` pair) into the model link field, then click **Download**.
+
+    Applio's `model_download_pipeline` will fetch the files and place them in `logs/<model_name>/` automatically. You can also upload model files manually to that directory.
+
+    <Tip>
+      Community-shared models are available on [Hugging Face](https://huggingface.co/) and the [Applio website](https://applio.org). Look for packages that include both a `.pth` and a `.index` file for best results.
+    </Tip>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
-    ```
+  <Step title="Open the Inference tab">
+    Click the **Inference** tab. In the **Model** dropdown, select the model you just downloaded. The dropdown is populated from the files present in `logs/`.
+  </Step>
+
+  <Step title="Upload your audio and configure parameters">
+    Upload your source audio file using the input audio widget. Then review the key conversion parameters:
+
+    | Parameter | Default | Description |
+    |---|---|---|
+    | **Pitch** | `0` | Semitone shift applied to the output pitch. Range: −24 to +24. Use `+12` (one octave up) when converting a male voice to a female model, or `−12` when doing the reverse. |
+    | **F0 Method** | `rmvpe` | Pitch extraction algorithm. `rmvpe` is the recommended default. Options: `rmvpe`, `fcpe`, `crepe`, `crepe-tiny`, and hybrid combinations such as `hybrid[rmvpe+fcpe]`. |
+    | **Index Rate** | `0.3` | Influence of the `.index` file on the output (0.0–1.0). Higher values produce a closer match to the training voice but may introduce artifacts. |
+    | **Volume Envelope** | `1.0` | Blending ratio for the output volume envelope. `1.0` uses the converted audio's envelope directly. |
+    | **Protect** | `0.33` | Protects consonants and breath sounds from conversion artifacts (0.0–0.5). |
+
+    <Note>
+      For singing voice conversions, enable **F0 Autotune** to snap the output pitch to the nearest chromatic note. Adjust **Autotune Strength** (0.0–1.0) to control how aggressively the pitch is quantized.
+    </Note>
+  </Step>
+
+  <Step title="Convert and download your output">
+    Click the **Convert** button. Applio will run the inference pipeline and display the output audio in the player below. Use the player controls to preview the result, then click the download icon to save the file.
+
+    The output format defaults to **WAV**. To change it, select a different option from the **Export Format** dropdown before converting. Supported formats are: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A`.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Path 2: CLI
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+The `core.py` CLI exposes the same inference pipeline as the web UI and is ideal for scripting, batch automation, or integrating Applio into larger workflows. Every parameter available in the UI has a corresponding CLI flag.
+
+The minimal command for a single-file conversion is:
+
+```bash
+python core.py infer \
+  --input_path audio/input.wav \
+  --output_path audio/output.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --f0_method rmvpe \
+  --pitch 0
+```
+
+### Common CLI Parameters
+
+| Flag | Default | Description |
+|---|---|---|
+| `--input_path` | *(required)* | Full path to the source audio file |
+| `--output_path` | *(required)* | Full path where the converted file will be saved |
+| `--pth_path` | *(required)* | Path to the `.pth` model weights file |
+| `--index_path` | *(required)* | Path to the `.index` FAISS index file |
+| `--pitch` | `0` | Semitone pitch shift (−24 to +24) |
+| `--f0_method` | `rmvpe` | Pitch extraction algorithm |
+| `--index_rate` | `0.3` | Index file influence (0.0–1.0) |
+| `--volume_envelope` | `1.0` | Output volume envelope blending |
+| `--protect` | `0.33` | Consonant protection level (0.0–0.5) |
+| `--export_format` | `WAV` | Output format: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A` |
+| `--embedder_model` | `contentvec` | Speaker embedding model |
+| `--split_audio` | `False` | Split long audio into segments before inference |
+| `--clean_audio` | `False` | Apply noise reduction to the output |
+| `--f0_autotune` | `False` | Snap output pitch to the chromatic grid |
+
+### Batch Inference
+
+To convert an entire folder of audio files in one call, use the `batch_infer` subcommand:
+
+```bash
+python core.py batch_infer \
+  --input_folder audio/input_folder/ \
+  --output_folder audio/output_folder/ \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --f0_method rmvpe \
+  --pitch 0 \
+  --export_format FLAC
+```
+
+### TTS-to-RVC Pipeline
+
+You can synthesize text with `edge-tts` and immediately pipe the result through RVC conversion in a single command:
+
+```bash
+python core.py tts \
+  --tts_text "Hello, this is a test of Applio voice conversion." \
+  --tts_file "" \
+  --tts_voice en-US-AriaNeural \
+  --tts_rate 0 \
+  --output_tts_path audio/tts_out.wav \
+  --output_rvc_path audio/rvc_out.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index
+```
+
+## Output Format Reference
+
+Applio supports the following output containers for all inference modes:
+
+| Format | Flag value | Notes |
+|---|---|---|
+| WAV | `WAV` | Lossless, uncompressed. Default output format. |
+| MP3 | `MP3` | Lossy, widely compatible. Good for sharing. |
+| FLAC | `FLAC` | Lossless, compressed. Recommended for archiving. |
+| OGG | `OGG` | Lossy, open format. |
+| M4A | `M4A` | Lossy, AAC-based. Good for Apple ecosystem compatibility. |
+
+## Next Steps
+
+You have completed your first voice conversion. From here you can explore the full set of inference parameters, train your own RVC model, or extend Applio with plugins.
+
+<CardGroup cols={2}>
+  <Card title="Full Inference Reference" icon="sliders" href="/features/inference">
+    Complete documentation for every inference parameter, post-processing effect, and formant-shifting option.
+  </Card>
+  <Card title="Training a Model" icon="chart-line" href="/features/training">
+    Learn how to preprocess a dataset, extract features, and train a custom RVC voice model from scratch.
+  </Card>
+</CardGroup>

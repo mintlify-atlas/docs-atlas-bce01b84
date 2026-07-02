@@ -1,0 +1,230 @@
+---
+title: "Install Applio on Windows, Linux, and macOS"
+sidebarTitle: "Installation"
+description: "Step-by-step instructions for installing Applio on Windows, Linux, and macOS using the automated scripts, or via Docker and manual setup."
+---
+
+Applio ships with platform-specific installer scripts that handle every step of the environment setup automatically — from creating an isolated Python virtual environment to downloading PyTorch, FFmpeg, and all other required dependencies. Most users only need to run a single file to have a fully working installation. This page walks through each platform in detail, lists all key dependencies, and explains how to launch the application once installation is complete.
+
+## System Requirements
+
+Before installing, make sure your system meets the following baseline requirements:
+
+| Requirement | Recommended |
+|---|---|
+| **Python** | 3.12 (the installer scripts target this version explicitly) |
+| **GPU** | NVIDIA with CUDA 12.8 support (CUDA 11.x is not supported by the default wheel index) |
+| **VRAM** | 4 GB minimum; 8 GB or more recommended for training |
+| **RAM** | 8 GB minimum; 16 GB recommended |
+| **Disk space** | 10 GB free (models and training data add more) |
+| **FFmpeg** | Required for audio encoding and decoding; installed automatically by the scripts |
+
+<Note>
+  **AMD GPU (Windows — ZLUDA):** Applio includes a ZLUDA compatibility shim (`rvc/lib/zluda.py`) that patches PyTorch's STFT operations when a ZLUDA device is detected. This allows AMD GPU acceleration on Windows without a separate installation step. Performance and compatibility may vary compared to NVIDIA CUDA.
+</Note>
+
+<Note>
+  **macOS (Apple Silicon / Intel):** GPU acceleration uses Apple's Metal Performance Shaders (MPS) via `PYTORCH_ENABLE_MPS_FALLBACK=1`. CPU-only fallback is used for operations not supported by MPS. `faiss` is installed via Homebrew rather than from PyPI on macOS.
+</Note>
+
+## Installation
+
+<Tabs>
+  <Tab title="Windows">
+    The Windows installer uses Miniconda to create a fully isolated Conda environment with Python 3.12, then installs `uv` as the package manager and pulls all dependencies from the PyTorch CUDA 12.8 wheel index.
+
+    <Steps>
+      <Step title="Download or clone the repository">
+        Download the latest release from [GitHub](https://github.com/IAHispano/Applio/releases) or clone the repository:
+
+        ```bash
+        git clone https://github.com/IAHispano/Applio.git
+        cd Applio
+        ```
+      </Step>
+      <Step title="Run the installer">
+        Double-click `run-install.bat` in Windows Explorer, or run it from a terminal:
+
+        ```bat
+        run-install.bat
+        ```
+
+        The installer will:
+
+        1. Download and silently install **Miniconda 3 (Python 3.12)** to `%UserProfile%\Miniconda3` if it is not already present.
+        2. Create a Conda environment at `.\env\` with Python 3.12.
+        3. Install **`uv`** into the new environment for fast dependency resolution.
+        4. Install all packages from `requirements.txt` using `uv pip install` with the extra PyTorch CUDA 12.8 index URL (`https://download.pytorch.org/whl/cu128`).
+
+        The installer displays elapsed time on completion and prompts you to press any key.
+      </Step>
+      <Step title="Confirm successful installation">
+        When the installer finishes, you will see:
+
+        ```
+        Applio has been installed successfully!
+        To start Applio, please run 'run-applio.bat'.
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Linux">
+    The Linux installer uses the `uv` package manager to create a `.venv` virtual environment, installs FFmpeg through your system's package manager, and then installs Python dependencies with the CUDA 12.8 wheel index.
+
+    <Steps>
+      <Step title="Download or clone the repository">
+        ```bash
+        git clone https://github.com/IAHispano/Applio.git
+        cd Applio
+        ```
+      </Step>
+      <Step title="Make the script executable and run it">
+        ```bash
+        chmod +x run-install.sh
+        ./run-install.sh
+        ```
+
+        The installer will:
+
+        1. Install **build tools** (`build-essential` on apt-based systems, `base-devel` on Arch, `@development-tools` on Fedora/RHEL).
+        2. Install **`uv`** if it is not already present (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+        3. Create a virtual environment at `.venv/` with Python 3.12 (`uv venv .venv --python 3.12`).
+        4. Install **FFmpeg** via `apt`, `pacman`, `dnf`, or Flatpak depending on what is available.
+        5. Install **`python-ffmpeg`** into the virtual environment.
+        6. Install all packages from `requirements.txt` with the CUDA 12.8 extra index URL:
+
+           ```bash
+           uv pip install -r requirements.txt \
+             --extra-index-url https://download.pytorch.org/whl/cu128 \
+             --index-strategy unsafe-best-match
+           ```
+
+        If a `.venv` directory already exists (indicating a previous install), the script will ask whether you want to reinstall or simply launch Applio.
+      </Step>
+      <Step title="Confirm successful installation">
+        A successful run ends with:
+
+        ```
+        Applio has been successfully installed. Run the file run-applio.sh to start the web interface!
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="macOS">
+    The macOS path in `run-install.sh` diverges from Linux at a few points: Homebrew is used to install FFmpeg and `faiss`, MPS environment variables are set, and PyTorch is installed from the standard PyPI index (not the CUDA wheel URL) since CUDA is not available on Apple hardware.
+
+    <Steps>
+      <Step title="Install Homebrew (if not already installed)">
+        The installer will install Homebrew automatically if it is missing. To install it manually:
+
+        ```bash
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        ```
+      </Step>
+      <Step title="Make the script executable and run it">
+        ```bash
+        chmod +x run-install.sh
+        ./run-install.sh
+        ```
+
+        The macOS path does the following in addition to the standard steps:
+
+        - Sets `PYTORCH_ENABLE_MPS_FALLBACK=1` and `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` so that MPS-unsupported operations fall back to CPU automatically.
+        - Installs `faiss` via Homebrew (`brew install faiss`) instead of the `faiss-cpu` PyPI package.
+        - Installs requirements from `requirements.txt` **without** the CUDA extra index URL, using the standard PyPI macOS builds of PyTorch (`torch==2.7.1`, `torchaudio==2.7.1`, `torchvision==0.22.1`).
+      </Step>
+      <Step title="Confirm successful installation">
+        ```
+        Applio has been successfully installed. Run the file run-applio.sh to start the web interface!
+        ```
+      </Step>
+    </Steps>
+
+    <Note>
+      MPS acceleration supports many operations used by Applio, but some computations (particularly during training) will silently fall back to CPU. For best performance on macOS, Apple Silicon (M-series) chips are recommended over Intel.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Docker
+
+A `Dockerfile` and `docker-compose.yaml` are included in the repository for containerized deployments. See the [Docker deployment guide](/deployment/docker) for full instructions.
+
+## Running Applio
+
+Once installation is complete, start Applio with the corresponding run script for your platform:
+
+<Tabs>
+  <Tab title="Windows">
+    ```bat
+    run-applio.bat
+    ```
+  </Tab>
+  <Tab title="Linux / macOS">
+    ```bash
+    ./run-applio.sh
+    ```
+  </Tab>
+</Tabs>
+
+The script activates the virtual environment, sets the required MPS environment variables (even on non-macOS platforms, for forward compatibility), and runs:
+
+```bash
+python app.py --open
+```
+
+Applio starts a local Gradio server and opens the web UI in your default browser at:
+
+```
+http://127.0.0.1:6969
+```
+
+The port is configurable; if 6969 is in use, Applio will try up to 10 sequential ports automatically.
+
+## TensorBoard
+
+To monitor model training metrics with TensorBoard, run the corresponding script:
+
+<Tabs>
+  <Tab title="Windows">
+    ```bat
+    run-tensorboard.bat
+    ```
+  </Tab>
+  <Tab title="Linux / macOS">
+    ```bash
+    ./run-tensorboard.sh
+    ```
+  </Tab>
+</Tabs>
+
+Internally this executes `python core.py tensorboard`, which launches the TensorBoard pipeline configured for Applio's `logs/` directory.
+
+## Key Dependencies
+
+The table below highlights the most important packages installed from `requirements.txt`:
+
+| Package | Version | Purpose |
+|---|---|---|
+| `torch` | 2.7.1+cu128 (Linux/Windows) / 2.7.1 (macOS) | Core deep learning framework |
+| `torchaudio` | 2.7.1+cu128 / 2.7.1 | Audio tensor operations |
+| `gradio` | 5.50.0 | Web UI framework |
+| `faiss-cpu` | 1.13.2 | FAISS index for feature retrieval (Linux/Windows; Homebrew on macOS) |
+| `librosa` | 0.11.0 | Audio analysis and feature extraction |
+| `soundfile` | 0.13.1 | Audio file I/O |
+| `sounddevice` | latest | Realtime audio I/O |
+| `edge-tts` | 7.2.8 | Microsoft Edge neural TTS |
+| `pedalboard` | latest | Audio effects processing |
+| `torchcrepe` | latest | CREPE pitch estimator |
+| `torchfcpe` | latest | FCPE pitch estimator |
+| `transformers` | 5.4.0 | HuBERT-based embedder models |
+| `numba` | 0.65.0 | JIT compilation for performance-critical paths |
+| `numpy` | 2.4.4 | Numerical computing |
+| `tensorboard` | latest | Training visualization |
+| `noisereduce` | latest | Post-processing noise reduction |
+
+<Tip>
+  All dependencies are installed into an isolated virtual environment (`.venv/` on Linux/macOS, `env/` on Windows). This means Applio will not interfere with any other Python projects on your system.
+</Tip>

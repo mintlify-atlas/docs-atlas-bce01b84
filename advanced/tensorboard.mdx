@@ -1,0 +1,126 @@
+---
+title: "Monitor Training with TensorBoard in Applio"
+sidebarTitle: "TensorBoard"
+description: "Launch TensorBoard to visualize Applio training loss curves, monitor overfitting, and compare runs. Run the included script or use the CLI."
+---
+
+Training an RVC voice model is an iterative process, and knowing when to stop is just as important as knowing how to start. Applio integrates TensorBoard — a real-time training visualization tool — so you can watch loss curves evolve, spot overfitting early, and compare multiple training runs side by side. Event logs are written to the `logs/<model_name>/` directory throughout training, and TensorBoard reads them live so you can monitor progress without interrupting the training process.
+
+## What TensorBoard Shows
+
+While a model trains, Applio logs the following metrics as TensorBoard scalar events:
+
+| Metric | Tag | What it means |
+|---|---|---|
+| Generator total loss | `loss/g/total` | Combined loss of the generator network. Should decrease over time. |
+| Discriminator total loss | `loss/d/total` | Combined loss of the discriminator. Should remain balanced relative to the generator. |
+| KL divergence loss | `loss/g/kl` | Measures how well the latent space is regularised. |
+| Mel spectrogram loss | `loss/g/mel` | Measures spectrogram reconstruction fidelity. Lower is better. |
+
+TensorBoard also renders mel spectrogram images, allowing you to visually inspect the reconstructed audio quality at any epoch.
+
+## Launching TensorBoard
+
+You can start TensorBoard in several ways depending on your operating system and workflow preference.
+
+<Steps>
+  <Step title="Choose your launch method">
+    Select the method that matches your environment:
+
+    **Windows** — double-click `run-tensorboard.bat` in the Applio root folder. The script activates the environment and runs `python core.py tensorboard`.
+
+    **Linux / macOS** — open a terminal in the Applio directory and run:
+
+    ```bash
+    ./run-tensorboard.sh
+    ```
+
+    **CLI (any platform)** — activate your virtual environment first, then:
+
+    ```bash
+    python core.py tensorboard
+    ```
+
+    **Python API** — call the function directly from your own script:
+
+    ```python
+    from core import run_tensorboard_script
+
+    run_tensorboard_script()
+    ```
+  </Step>
+
+  <Step title="Open the browser">
+    TensorBoard starts a local web server and prints the access URL to the console. By default it is:
+
+    ```
+    http://localhost:6006
+    ```
+
+    The console also prints a direct link with pinned loss cards pre-configured for the four key Applio metrics (`loss/g/total`, `loss/d/total`, `loss/g/kl`, `loss/g/mel`).
+  </Step>
+
+  <Step title="Select your run">
+    In the TensorBoard UI, use the left-hand panel to filter by model name (log directory). If you have trained multiple models, each appears as a separate run and can be toggled on or off for comparison.
+  </Step>
+</Steps>
+
+<Note>
+  TensorBoard reads event files from the `logs/` directory, which is resolved relative to the Applio repository root. Make sure you launch TensorBoard from the Applio root directory (or that your working directory is set correctly) so it points at the right log path.
+</Note>
+
+## Log Directory
+
+Training event files are written to:
+
+```
+logs/
+└── <model_name>/
+    ├── events.out.tfevents.*    # TensorBoard event data
+    ├── G_<epoch>.pth            # Generator checkpoints
+    └── D_<epoch>.pth            # Discriminator checkpoints
+```
+
+TensorBoard monitors this directory recursively, so all models trained under `logs/` are available simultaneously.
+
+## Reading the Training Curves
+
+Understanding what the curves should look like will help you make informed decisions about when to continue training and when to stop.
+
+**Generator loss (`loss/g/total`)** should decrease steadily over the first several hundred epochs, then plateau. A sudden spike may indicate a learning rate issue or a corrupted batch.
+
+**Discriminator loss (`loss/d/total`)** should remain relatively balanced with the generator — neither dominating the other. If the discriminator loss collapses to near zero while the generator loss stays high, the discriminator has outpaced the generator and the model is unlikely to improve further.
+
+**Mel loss (`loss/g/mel`)** is the most direct measure of audio reconstruction quality. Track this curve especially closely: a consistently decreasing mel loss correlates with more natural-sounding output.
+
+**Overfitting** occurs when the training loss continues to fall but the audio quality of checkpoints starts to degrade on unseen speech. Signs in TensorBoard include a mel loss that stalls or begins rising after a minimum, and spectrogram images that look over-smoothed or artefact-heavy.
+
+<Tip>
+  Save checkpoints at regular intervals (use `--save_every_epoch` during training) so you can roll back to the epoch that sounded best, even if you continued training past the optimum.
+</Tip>
+
+## Overtraining Detector
+
+Applio includes a built-in overtraining detector that automatically stops training when loss improvement stalls. Enable it during training with the `overtraining_detector` flag:
+
+```bash
+python core.py train \
+  --model_name MyModel \
+  --total_epoch 500 \
+  --overtraining_detector True \
+  --overtraining_threshold 50 \
+  ...
+```
+
+The `overtraining_threshold` controls how many consecutive epochs without improvement must occur before training is halted. This saves GPU time and prevents the model from degrading due to over-optimisation on the training dataset.
+
+## Requirements
+
+TensorBoard support requires two packages that are included in Applio's `requirements.txt` and installed automatically:
+
+| Package | Purpose |
+|---|---|
+| `tensorboard` | The core TensorBoard server and web UI |
+| `tensorboardX` | The writer library used during training to emit event files |
+
+If you encounter a `ModuleNotFoundError` for either package, re-run the Applio installer (`run-install.bat` / `run-install.sh`) to restore the full dependency set.

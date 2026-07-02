@@ -1,0 +1,195 @@
+---
+title: "Applio CLI Utility Commands Reference"
+sidebarTitle: "Utilities"
+description: "Reference for Applio's utility CLI commands: model_information, model_blender, download, prerequisites, audio_analyzer, and tensorboard."
+---
+
+Beyond inference and training, the Applio CLI includes a set of utility subcommands for inspecting models, merging model weights, downloading models from the internet, setting up the runtime environment, analyzing audio files, and launching TensorBoard. These commands are independent of the training pipeline and can be run at any time from the Applio root directory with the virtual environment activated.
+
+---
+
+## model_information
+
+The `model_information` subcommand prints metadata stored inside a `.pth` model file — including the model architecture, the epoch at which it was saved, the sample rate it was trained at, and the embedder model used. This is useful for auditing unknown or shared models before using them for inference or blending.
+
+### Flags
+
+<ParamField path="--pth_path" type="string" required>
+  Path to the `.pth` model file to inspect.
+</ParamField>
+
+### Example
+
+```bash
+python core.py model_information \
+  --pth_path logs/MyModel/MyModel.pth
+```
+
+The command prints a summary of the model's stored configuration to stdout, including fields such as architecture version, training epoch, sample rate, and the embedder used during training.
+
+---
+
+## model_blender
+
+The `model_blender` subcommand fuses two RVC models by linearly interpolating their weights at a configurable ratio. The result is a new model file that combines vocal characteristics from both inputs. This technique — often called model merging or model interpolation — can produce hybrid voices that blend the timbre or style of two different source models.
+
+### Flags
+
+<ParamField path="--model_name" type="string" required>
+  Name for the output blended model. The resulting `.pth` file will be saved to `logs/<model_name>/`.
+</ParamField>
+
+<ParamField path="--pth_path_1" type="string" required>
+  Path to the first source `.pth` model file.
+</ParamField>
+
+<ParamField path="--pth_path_2" type="string" required>
+  Path to the second source `.pth` model file.
+</ParamField>
+
+<ParamField path="--ratio" type="float" default="0.5">
+  Blend ratio between the two models. Range: `0.0`–`1.0` in steps of `0.1`. A value of `0.0` produces a copy of model 1; `1.0` produces a copy of model 2; `0.5` produces an equal blend. Intermediate values interpolate smoothly between the two.
+</ParamField>
+
+### Example
+
+```bash
+python core.py model_blender \
+  --model_name BlendedVoice \
+  --pth_path_1 logs/ModelA/ModelA.pth \
+  --pth_path_2 logs/ModelB/ModelB.pth \
+  --ratio 0.5
+```
+
+<Note>
+  Both models must have been trained with the same architecture (same sample rate and vocoder settings) for the blend to produce meaningful results. Blending incompatible architectures may fail or produce silent / degraded output.
+</Note>
+
+---
+
+## download
+
+The `download` subcommand downloads a model archive from a direct URL or a Hugging Face model repository link, extracts the contents, and places the resulting files in the `logs/` directory so they are immediately available for inference.
+
+### Flags
+
+<ParamField path="--model_link" type="string" required>
+  A direct download URL (e.g., a `.zip` file) or a Hugging Face repository URL pointing to a model archive. The link must be publicly accessible.
+</ParamField>
+
+### Example
+
+```bash
+python core.py download \
+  --model_link https://huggingface.co/YourOrg/YourModel/resolve/main/MyVoice.zip
+```
+
+After the command completes, the model files will be available under `logs/` ready for use with `infer` or `tts`.
+
+<Warning>
+  Only download models from trusted sources. Applio executes the download directly — no integrity verification beyond format detection is performed. Review model licenses before using models in production.
+</Warning>
+
+---
+
+## prerequisites
+
+The `prerequisites` subcommand downloads and installs the files that Applio requires at runtime: official pretrained base model weights, supporting models (e.g., RMVPE), and platform-specific executables. Run this command once after a fresh installation, or again if any required files are missing.
+
+### Flags
+
+<ParamField path="--pretraineds_hifigan" type="boolean" default="True">
+  Download the official Applio pretrained HiFi-GAN generator and discriminator weights used as a training starting point. Strongly recommended. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--models" type="boolean" default="True">
+  Download additional supporting models, including RMVPE and other pitch-extraction or embedding models. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--exe" type="boolean" default="True">
+  Download required platform-specific executables (e.g., FFmpeg binaries used for audio processing). Accepts `True` or `False`.
+</ParamField>
+
+### Example
+
+```bash
+# Download everything (recommended for a fresh install)
+python core.py prerequisites \
+  --pretraineds_hifigan True \
+  --models True \
+  --exe True
+
+# Download only the pretrained weights, skip executables
+python core.py prerequisites \
+  --pretraineds_hifigan True \
+  --models True \
+  --exe False
+```
+
+<Tip>
+  If you have already installed Applio's executables through another method (e.g., your system has FFmpeg in PATH), you can skip the `--exe True` download to avoid redundancy.
+</Tip>
+
+---
+
+## audio_analyzer
+
+The `audio_analyzer` subcommand reads an audio file and prints a summary of its technical properties: sample rate, duration, bit depth, channel count, and RMS signal level. It also generates a waveform and spectrogram visualization saved as a PNG file at `logs/audio_analysis.png`.
+
+### Flags
+
+<ParamField path="--input_path" type="string" required>
+  Path to the audio file to analyze. Supports common audio formats (WAV, MP3, FLAC, etc.).
+</ParamField>
+
+### Outputs
+
+The command prints the following information to stdout:
+
+- Sample rate (Hz)
+- Duration (seconds)
+- Bit depth
+- Number of channels (mono / stereo)
+- RMS level (dBFS)
+
+It also saves a plot image to `logs/audio_analysis.png`.
+
+### Example
+
+```bash
+python core.py audio_analyzer \
+  --input_path audio/sample.wav
+```
+
+Example output:
+
+```bash
+Audio info of audio/sample.wav: {'sample_rate': 44100, 'duration': 12.3, ...}
+Audio file audio/sample.wav analyzed successfully. Plot saved at: logs/audio_analysis.png
+```
+
+<Tip>
+  Use `audio_analyzer` to verify that your training dataset has the expected sample rate and that audio levels are reasonable before running `preprocess`. Consistently low or clipped RMS levels are common causes of poor model quality.
+</Tip>
+
+---
+
+## tensorboard
+
+The `tensorboard` subcommand launches a TensorBoard server pointed at Applio's `logs/` directory. This lets you monitor training loss curves, inspect audio samples written during training, and compare multiple training runs in a browser-based UI.
+
+### Flags
+
+This subcommand takes no arguments.
+
+### Example
+
+```bash
+python core.py tensorboard
+```
+
+After running this command, TensorBoard will start and print a local URL (typically `http://localhost:6006`) that you can open in a browser. The server will remain running until you interrupt it with `Ctrl+C`.
+
+<Note>
+  TensorBoard data is only available while the `logs/` directory contains event files written by one or more training runs. Start a training job first, then open TensorBoard to view live or historical metrics.
+</Note>

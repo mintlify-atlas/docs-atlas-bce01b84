@@ -1,0 +1,138 @@
+---
+title: "Blend Two Voice Models with Applio Voice Blender"
+sidebarTitle: "Voice Blender"
+description: "Fuse two trained RVC models into a single new voice at a configurable blend ratio using Applio's Voice Blender tool."
+---
+
+The Voice Blender tool lets you fuse two independently trained RVC `.pth` models into a single new model by linearly interpolating their weight tensors at a configurable ratio. The result is a model whose voice characteristics sit somewhere between the two source models — closer to Model A at a low ratio, closer to Model B at a high ratio, and an equal mix at 0.5. This is a quick way to create hybrid voices, smooth out weaknesses of one model with strengths of another, or explore the latent space between two similar voices without retraining from scratch.
+
+Internally, the blending is performed in `rvc/train/process/model_blender.py`. Both checkpoints are loaded to CPU, their weight dictionaries are verified to share the same architecture and sample rate, and each tensor is blended as:
+
+```
+blended[key] = ratio * model_1[key] + (1 - ratio) * model_2[key]
+```
+
+The resulting model is saved as a standard `.pth` file at `logs/<model_name>.pth` and can be used for inference immediately.
+
+## Requirements and Constraints
+
+- Both source models must have **identical architectures** — the same set of weight keys. Attempting to blend incompatible models will return an error: `"Fail to merge the models. The model architectures are not the same."`
+- Both source models must have the **same sample rate** (`sr` field in the checkpoint). Mismatched sample rates are detected and reported before any blending occurs.
+- The vocoder type (`HiFi-GAN`) is inherited from the first model.
+
+<Warning>
+Blended models are experimental. The blend ratio is a linear weight interpolation, not an audio-domain average — the perceptual relationship between ratio and output timbre is non-linear. Ratios between 0.3 and 0.7 tend to produce the most stable and usable results.
+</Warning>
+
+## Parameters
+
+<ParamField path="model_name" type="str" required>
+  Name for the output blended model. The result is saved as `logs/<model_name>.pth`.
+</ParamField>
+
+<ParamField path="pth_path_1" type="str" required>
+  Path to the first source `.pth` model file. At a ratio of `0.0`, the output is essentially this model; at `1.0`, only the second model's weights contribute.
+</ParamField>
+
+<ParamField path="pth_path_2" type="str" required>
+  Path to the second source `.pth` model file. At a ratio of `1.0`, the output is essentially this model.
+</ParamField>
+
+<ParamField path="ratio" type="float" default="0.5">
+  Blend ratio on a scale of **0.0 to 1.0**.
+  - `0.0` → output is 100% Model 1
+  - `0.5` → equal mix of both models
+  - `1.0` → output is 100% Model 2
+
+  The ratio is applied element-wise to every weight tensor. For the `emb_g.weight` (speaker embedding) tensor, if the two models have different numbers of speakers, only the minimum number of speaker rows are blended.
+</ParamField>
+
+## CLI Example
+
+```bash
+python core.py model_blender \
+  --model_name BlendedModel \
+  --pth_path_1 logs/ModelA/ModelA.pth \
+  --pth_path_2 logs/ModelB/ModelB.pth \
+  --ratio 0.5
+```
+
+Try different ratios to find the best blend for your use case:
+
+```bash
+# Lean 70% toward ModelA
+python core.py model_blender \
+  --model_name BlendedModel_70A \
+  --pth_path_1 logs/ModelA/ModelA.pth \
+  --pth_path_2 logs/ModelB/ModelB.pth \
+  --ratio 0.3
+
+# Lean 70% toward ModelB
+python core.py model_blender \
+  --model_name BlendedModel_70B \
+  --pth_path_1 logs/ModelA/ModelA.pth \
+  --pth_path_2 logs/ModelB/ModelB.pth \
+  --ratio 0.7
+```
+
+## Python API
+
+```python
+from core import run_model_blender_script
+
+message, blended_path = run_model_blender_script(
+    model_name="BlendedModel",
+    pth_path_1="logs/ModelA/ModelA.pth",
+    pth_path_2="logs/ModelB/ModelB.pth",
+    ratio=0.5,
+)
+
+print(message)       # "Model logs/ModelA/ModelA.pth and logs/ModelB/ModelB.pth are merged with alpha 0.5."
+print(blended_path)  # "logs/BlendedModel.pth"
+```
+
+You can then use the blended model for inference immediately:
+
+```python
+from core import run_infer_script
+
+run_infer_script(
+    pitch=0,
+    index_rate=0.3,
+    volume_envelope=1.0,
+    protect=0.33,
+    f0_method="rmvpe",
+    input_path="assets/audios/my_voice.wav",
+    output_path="assets/audios/blended_output.wav",
+    pth_path="logs/BlendedModel.pth",
+    index_path="",          # blended models don't have a paired index; use "" or generate one separately
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=False,
+    clean_strength=0.7,
+    export_format="WAV",
+    embedder_model="contentvec",
+    sid=0,
+)
+```
+
+## Output Location
+
+The blended model is saved directly to `logs/<model_name>.pth` (note: at the root of `logs/`, not inside a subdirectory). If you want to use it with the Applio UI alongside an index file, move or copy it into its own folder:
+
+```
+logs/
+└── BlendedModel/
+    └── BlendedModel.pth    ← move here for UI auto-discovery
+```
+
+<Note>
+Blended models do not automatically get a `.index` file because no feature extraction was run for the blend. For best inference quality, run the index generation step against the training data of whichever source model you blended more heavily toward, or simply use `index_rate=0.0` and rely on the model weights alone.
+</Note>
+
+<Tip>
+Voice blending is particularly useful when one model has excellent clarity on consonants but weak vowel timbre, and another model has the opposite profile. A ratio near 0.4–0.6 often yields a blend that is stronger than either model alone.
+</Tip>

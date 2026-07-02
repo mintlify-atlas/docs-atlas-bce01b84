@@ -1,0 +1,105 @@
+---
+title: "Applio CLI: Scriptable Voice Conversion"
+sidebarTitle: "Overview"
+description: "Use the Applio CLI (core.py) for headless inference, training, TTS, and model management. All Gradio UI operations are available via command line."
+---
+
+Applio exposes its entire voice-conversion pipeline through a single entry-point script, `core.py`, which uses Python's built-in `argparse` library. Every feature available in the Gradio web UI — inference, batch processing, training, text-to-speech, model blending, and more — can be driven from the command line without launching a browser. This makes `core.py` ideal for automation scripts, CI/CD pipelines, cloud batch jobs, and any headless environment where a graphical interface is not practical.
+
+## Basic usage
+
+The CLI follows the standard subcommand pattern. Run the script with a subcommand name, followed by the flags specific to that subcommand:
+
+```bash
+python core.py <subcommand> [flags]
+```
+
+To display the full help text for any subcommand, append `--help`:
+
+```bash
+python core.py infer --help
+```
+
+## Environment setup
+
+All commands must be run from the **Applio root directory** (the folder that contains `core.py`) with the project's virtual environment activated. Running from a different working directory or without the virtual environment will cause import errors.
+
+```bash
+# Linux / macOS
+source .venv/bin/activate
+python core.py infer --help
+
+# Windows
+.venv\Scripts\activate
+python core.py infer --help
+```
+
+<Note>
+  If you have not yet installed Applio's dependencies, run `python core.py prerequisites` first. This downloads the required pretrained models and executables into the correct locations.
+</Note>
+
+## Available subcommands
+
+<CardGroup cols={2}>
+  <Card title="infer" href="/cli/infer">
+    Convert a **single audio file** to a target voice using a trained RVC model.
+  </Card>
+  <Card title="batch_infer" href="/cli/infer">
+    Convert an entire **folder of audio files** in one pass using the same model and settings.
+  </Card>
+  <Card title="tts" href="/cli/tts">
+    Synthesize text with **Edge TTS**, then immediately apply RVC voice conversion — all in one command.
+  </Card>
+  <Card title="preprocess" href="/cli/train">
+    Slice and clean a raw audio dataset to prepare it for feature extraction and training.
+  </Card>
+  <Card title="extract" href="/cli/train">
+    Extract pitch (F0) and speaker embeddings from a preprocessed dataset.
+  </Card>
+  <Card title="train" href="/cli/train">
+    Train an RVC model from extracted features. Automatically runs index generation on completion.
+  </Card>
+  <Card title="index" href="/cli/train">
+    Manually (re-)generate the FAISS index file for a trained model.
+  </Card>
+  <Card title="model_information" href="/cli/utilities">
+    Print metadata stored inside a `.pth` model file — architecture, epoch, sample rate, and more.
+  </Card>
+  <Card title="model_blender" href="/cli/utilities">
+    Fuse two RVC models together at a configurable blend ratio to create a hybrid voice.
+  </Card>
+  <Card title="tensorboard" href="/cli/utilities">
+    Launch a TensorBoard server pointed at the `logs/` directory to monitor training progress.
+  </Card>
+  <Card title="download" href="/cli/utilities">
+    Download and extract a model archive from a direct URL or Hugging Face link into `logs/`.
+  </Card>
+  <Card title="prerequisites" href="/cli/utilities">
+    Download pretrained models, additional support models (RMVPE, etc.), and required executables.
+  </Card>
+  <Card title="audio_analyzer" href="/cli/utilities">
+    Analyze an audio file and print sample rate, duration, bit depth, channel count, and RMS level.
+  </Card>
+</CardGroup>
+
+## Quick reference table
+
+| Subcommand | Purpose | Required flags |
+|---|---|---|
+| `infer` | Single-file voice conversion | `--input_path`, `--output_path`, `--pth_path`, `--index_path` |
+| `batch_infer` | Folder voice conversion | `--input_folder`, `--output_folder`, `--pth_path`, `--index_path` |
+| `tts` | TTS + voice conversion | `--tts_text`/`--tts_file`, `--tts_voice`, `--output_tts_path`, `--output_rvc_path`, `--pth_path`, `--index_path` |
+| `preprocess` | Dataset preprocessing | `--model_name`, `--dataset_path`, `--sample_rate`, `--cut_preprocess` |
+| `extract` | Feature extraction | `--model_name`, `--sample_rate`, `--include_mutes` |
+| `train` | Model training | `--model_name`, `--save_every_epoch`, `--sample_rate` |
+| `index` | Index generation | `--model_name` |
+| `model_information` | Model metadata | `--pth_path` |
+| `model_blender` | Model fusion | `--model_name`, `--pth_path_1`, `--pth_path_2` |
+| `tensorboard` | TensorBoard server | _(none)_ |
+| `download` | Model download | `--model_link` |
+| `prerequisites` | Dependency setup | _(none required)_ |
+| `audio_analyzer` | Audio analysis | `--input_path` |
+
+<Tip>
+  Pass `--help` to any subcommand to see the exact accepted values and defaults printed directly in your terminal, e.g. `python core.py train --help`.
+</Tip>

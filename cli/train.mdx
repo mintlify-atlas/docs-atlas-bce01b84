@@ -1,0 +1,306 @@
+---
+title: "applio train: Model Training Pipeline Commands"
+sidebarTitle: "train"
+description: "Complete CLI reference for Applio's four-stage training pipeline: preprocess, extract, train, and index subcommands with all flags and defaults."
+---
+
+Training a custom RVC voice model in Applio is a four-stage pipeline. Each stage is exposed as a separate subcommand in `core.py`, which lets you inspect intermediate results, re-run individual stages without repeating earlier work, and parallelize or schedule stages independently. The stages must be run in order: preprocessing cleans and segments raw audio; extraction computes pitch curves and speaker embeddings; training optimizes the model weights; and index generation builds a FAISS index for retrieval-based conversion. The `train` subcommand automatically triggers index generation on successful completion, but you can also run `index` separately at any time.
+
+<Warning>
+  All four commands must use the **same `--model_name` and `--sample_rate`** values. Mixing these across stages will cause training failures or poor-quality models.
+</Warning>
+
+## Complete pipeline
+
+<Steps>
+  <Step title="Preprocess the dataset">
+    Slice, filter, and normalize your raw audio files so they are ready for feature extraction.
+
+    ```bash
+    python core.py preprocess \
+      --model_name MyVoice \
+      --dataset_path /data/voice_samples \
+      --sample_rate 40000 \
+      --cpu_cores 4 \
+      --cut_preprocess Automatic
+    ```
+  </Step>
+
+  <Step title="Extract features">
+    Compute F0 pitch curves and speaker embeddings from the preprocessed data.
+
+    ```bash
+    python core.py extract \
+      --model_name MyVoice \
+      --f0_method rmvpe \
+      --gpu 0 \
+      --sample_rate 40000 \
+      --embedder_model contentvec \
+      --include_mutes 2
+    ```
+  </Step>
+
+  <Step title="Train the model">
+    Optimize model weights. Index generation runs automatically at the end.
+
+    ```bash
+    python core.py train \
+      --model_name MyVoice \
+      --total_epoch 200 \
+      --save_every_epoch 10 \
+      --batch_size 8 \
+      --gpu 0 \
+      --sample_rate 40000 \
+      --overtraining_detector True \
+      --overtraining_threshold 50
+    ```
+  </Step>
+
+  <Step title="(Optional) Regenerate the index">
+    Manually re-run FAISS index generation, for example if you want to change the algorithm after training.
+
+    ```bash
+    python core.py index \
+      --model_name MyVoice \
+      --index_algorithm Auto
+    ```
+  </Step>
+</Steps>
+
+---
+
+## preprocess
+
+The preprocess stage reads raw audio files from `--dataset_path`, slices them into manageable chunks, applies optional noise reduction and normalization, and writes the processed segments into `logs/<model_name>/`. The quality of this step directly affects the quality of the trained model.
+
+### Flags
+
+<ParamField path="--model_name" type="string" required>
+  Name of the model. Determines the subdirectory under `logs/` where preprocessed data is stored. Must match the names used in subsequent pipeline stages.
+</ParamField>
+
+<ParamField path="--dataset_path" type="string" required>
+  Path to the directory containing raw training audio files. Applio accepts common formats (WAV, MP3, FLAC, etc.).
+</ParamField>
+
+<ParamField path="--sample_rate" type="integer" required>
+  Target sample rate for all processed audio. Choices: `32000`, `40000`, `48000`. All files will be resampled to this rate. Choose a rate that matches the vocoder you plan to use during training.
+</ParamField>
+
+<ParamField path="--cut_preprocess" type="string" default="Automatic" required>
+  Method used to split audio into chunks before processing. Choices: `Skip` (no splitting), `Simple` (fixed-length splits), `Automatic` (silence-based splits). `Automatic` is recommended for most datasets.
+</ParamField>
+
+<ParamField path="--cpu_cores" type="integer">
+  Number of CPU cores to use during preprocessing. Accepts `1`–`64`. Defaults to using all available cores when not specified.
+</ParamField>
+
+<ParamField path="--process_effects" type="boolean" default="False">
+  When set to `True`, disables all internal audio filters during preprocessing. Use only if you have already pre-processed your audio externally. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--noise_reduction" type="boolean" default="False">
+  Apply spectral noise reduction to each audio segment during preprocessing. Useful for datasets recorded in noisy environments. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--noise_reduction_strength" type="float" default="0.7">
+  Intensity of the noise reduction filter. Range: `0.0`–`1.0`. Only active when `--noise_reduction True`.
+</ParamField>
+
+<ParamField path="--chunk_len" type="float" default="3.0">
+  Target chunk length in seconds when splitting audio. Accepts values from `0.5` to `5.0` in steps of `0.5`. Shorter chunks increase the total number of training samples; longer chunks preserve more context.
+</ParamField>
+
+<ParamField path="--overlap_len" type="float" default="0.3">
+  Overlap between consecutive chunks in seconds. Choices: `0.0`, `0.1`, `0.2`, `0.3`, `0.4`. A small overlap reduces boundary artifacts at the cost of slightly redundant data.
+</ParamField>
+
+<ParamField path="--normalization_mode" type="string" default="none">
+  Audio normalization strategy. Choices: `none` (no normalization), `pre` (normalize before slicing), `post` (normalize each chunk after slicing).
+</ParamField>
+
+---
+
+## extract
+
+The extract stage reads the preprocessed audio produced by `preprocess` and computes two types of features for every segment: F0 pitch curves (using the selected `--f0_method`) and speaker embeddings (using the selected `--embedder_model`). These features are written to `logs/<model_name>/` and consumed directly by the `train` stage.
+
+### Flags
+
+<ParamField path="--model_name" type="string" required>
+  Name of the model. Must match the name used during preprocessing.
+</ParamField>
+
+<ParamField path="--sample_rate" type="integer" required>
+  Sample rate of the preprocessed data. Choices: `32000`, `40000`, `44100`, `48000`. Must match the value used during preprocessing.
+</ParamField>
+
+<ParamField path="--include_mutes" type="integer" default="2" required>
+  Number of silent (mute) audio files to include in the training data. Range: `0`–`10`. Including a small number of silent samples helps the model learn silence handling. Set to `0` to exclude silence entirely.
+</ParamField>
+
+<ParamField path="--f0_method" type="string" default="rmvpe">
+  Pitch-extraction algorithm. Choices for extraction: `crepe`, `crepe-tiny`, `rmvpe`, `fcpe`. `rmvpe` is recommended for most voices; `crepe` may handle falsetto and high-pitched voices better.
+</ParamField>
+
+<ParamField path="--cpu_cores" type="integer">
+  Number of CPU cores to use for feature extraction. Accepts `1`–`64`. Optional; defaults to all available cores.
+</ParamField>
+
+<ParamField path="--gpu" type="string" default="-">
+  GPU device index(es) to use for extraction (e.g., `0`, `0-1`). Pass `-` to use CPU only. GPU extraction is significantly faster for large datasets.
+</ParamField>
+
+<ParamField path="--embedder_model" type="string" default="contentvec">
+  Speaker-embedding model. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`. Language-specific HuBERT models can produce better embeddings for non-English datasets.
+</ParamField>
+
+<ParamField path="--embedder_model_custom" type="string" default="None">
+  Path to a custom embedding model. Only used when `--embedder_model custom`.
+</ParamField>
+
+---
+
+## train
+
+The train stage reads the features produced by `extract` and optimizes the RVC generator and discriminator networks. On completion it automatically calls the `index` subcommand to build the FAISS retrieval index. Checkpoint weights are saved to `logs/<model_name>/` according to the save frequency settings.
+
+<Tip>
+  Enable `--overtraining_detector True` to automatically stop training when the model stops improving. Set `--overtraining_threshold` to the number of consecutive non-improving epochs that should trigger early stopping.
+</Tip>
+
+### Flags
+
+<ParamField path="--model_name" type="string" required>
+  Name of the model to train. Must match the name used in preprocessing and extraction.
+</ParamField>
+
+<ParamField path="--save_every_epoch" type="integer" required>
+  Save a checkpoint every N epochs. Accepts `1`–`100`. Lower values give more recovery points but use more disk space.
+</ParamField>
+
+<ParamField path="--sample_rate" type="integer" required>
+  Sample rate of the training data. Choices: `32000`, `40000`, `48000`. Must match the value used in all previous stages.
+</ParamField>
+
+<ParamField path="--total_epoch" type="integer" default="1000">
+  Total number of epochs to train. Accepts `1`–`10000`. For most voices, `100`–`500` epochs is a practical starting range; overtraining detection can stop training early.
+</ParamField>
+
+<ParamField path="--batch_size" type="integer" default="8">
+  Number of audio samples per training step. Accepts `1`–`50`. Larger batches train faster but require more GPU memory. Typical values: `4`–`16` on consumer GPUs.
+</ParamField>
+
+<ParamField path="--gpu" type="string" default="0">
+  GPU device index for training (e.g., `0`). Multi-GPU training uses a hyphen-separated list (e.g., `0-1`).
+</ParamField>
+
+<ParamField path="--save_only_latest" type="boolean" default="False">
+  When `True`, only the most recent checkpoint is kept on disk; older checkpoints are deleted. Saves disk space at the cost of losing rollback history. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--save_every_weights" type="boolean" default="True">
+  When `True`, a full model weight file (`.pth`) is saved at each checkpoint interval, not just the training state. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--overtraining_detector" type="boolean" default="False">
+  Enable automatic detection of overtraining. When active, training stops if the validation loss does not improve for `--overtraining_threshold` consecutive epochs. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--overtraining_threshold" type="integer" default="50">
+  Number of consecutive epochs without improvement before training is stopped. Accepts `1`–`100`. Only active when `--overtraining_detector True`.
+</ParamField>
+
+<ParamField path="--pretrained" type="boolean" default="True">
+  Initialize the model from Applio's official pretrained base weights. Strongly recommended — training from scratch requires vastly more data and time. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--custom_pretrained" type="boolean" default="False">
+  Use custom pretrained generator and discriminator weights instead of the official Applio pretraineds. When `True`, you must also supply `--g_pretrained_path` and `--d_pretrained_path`. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--g_pretrained_path" type="string" default="None">
+  Path to a custom pretrained generator (G) model file. Only used when `--custom_pretrained True`.
+</ParamField>
+
+<ParamField path="--d_pretrained_path" type="string" default="None">
+  Path to a custom pretrained discriminator (D) model file. Only used when `--custom_pretrained True`.
+</ParamField>
+
+<ParamField path="--vocoder" type="string" default="HiFi-GAN">
+  Vocoder architecture to use for waveform synthesis. Choices: `HiFi-GAN`, `MRF HiFi-GAN`, `RefineGAN`. `HiFi-GAN` is the standard choice; `MRF HiFi-GAN` and `RefineGAN` may offer quality improvements on some voices.
+</ParamField>
+
+<ParamField path="--index_algorithm" type="string" default="Auto">
+  FAISS index-building algorithm run automatically after training completes. Choices: `Auto`, `Faiss`, `KMeans`. `Auto` selects the best method based on dataset size.
+</ParamField>
+
+<ParamField path="--cache_data_in_gpu" type="boolean" default="False">
+  Cache training feature tensors in GPU memory for faster data loading. Requires sufficient VRAM (approximately equal to the size of your extracted features). Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--cleanup" type="boolean" default="False">
+  Delete data from a previous training attempt for this model before starting. Use with caution — this cannot be undone. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--checkpointing" type="boolean" default="False">
+  Enable gradient checkpointing to reduce VRAM usage during training at the cost of a small speed penalty. Useful for training on GPUs with limited memory. Accepts `True` or `False`.
+</ParamField>
+
+---
+
+## index
+
+The `index` subcommand builds or rebuilds the FAISS retrieval index for a model. This is run automatically at the end of `train`, but can also be called manually — for example to change the index algorithm without retraining.
+
+### Flags
+
+<ParamField path="--model_name" type="string" required>
+  Name of the model for which to generate the index. Must have completed the `train` stage.
+</ParamField>
+
+<ParamField path="--index_algorithm" type="string" default="Auto">
+  Algorithm to use when building the FAISS index. Choices: `Auto`, `Faiss`, `KMeans`. `Auto` is recommended for most dataset sizes.
+</ParamField>
+
+---
+
+## End-to-end example
+
+The following example trains a model called `MyVoice` at 40 kHz using four CPU cores for preprocessing, a single GPU for extraction and training, 200 epochs, and overtraining protection.
+
+```bash
+python core.py preprocess \
+  --model_name MyVoice \
+  --dataset_path /data/voice_samples \
+  --sample_rate 40000 \
+  --cpu_cores 4 \
+  --cut_preprocess Automatic \
+  --noise_reduction True \
+  --noise_reduction_strength 0.5
+
+python core.py extract \
+  --model_name MyVoice \
+  --f0_method rmvpe \
+  --gpu 0 \
+  --sample_rate 40000 \
+  --embedder_model contentvec \
+  --include_mutes 2
+
+python core.py train \
+  --model_name MyVoice \
+  --total_epoch 200 \
+  --save_every_epoch 10 \
+  --batch_size 8 \
+  --gpu 0 \
+  --sample_rate 40000 \
+  --overtraining_detector True \
+  --overtraining_threshold 50 \
+  --pretrained True \
+  --vocoder HiFi-GAN \
+  --index_algorithm Auto
+```
+
+<Note>
+  The `train` command automatically runs `index` at the end. You only need to run `python core.py index` separately if you want to regenerate the index with a different algorithm after training has already finished.
+</Note>

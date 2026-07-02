@@ -1,0 +1,187 @@
+---
+title: "Voice Conversion Inference with Applio"
+sidebarTitle: "Inference"
+description: "Convert audio using pre-trained RVC models in Applio. Configure pitch, F0 method, index rate, formant shifting, and audio cleaning for best results."
+---
+
+Inference is the core operation of Applio: you feed it a source audio file, point it at a pre-trained `.pth` model and its companion `.index` file, and it returns a new audio file where the voice has been converted to sound like the target speaker. Under the hood, Applio loads the model, extracts the fundamental frequency (F0) pitch contour from your input using one of several algorithms (RMVPE, FCPE, CREPE, or hybrids of these), encodes the audio using a speaker-embedding model such as ContentVec, and finally synthesises the output through the HiFi-GAN vocoder. The result is a natural-sounding voice conversion that preserves the prosody of the original while matching the timbre of the trained model.
+
+## Single vs. Batch Inference
+
+Applio supports two inference modes, both driven by the same underlying pipeline in `rvc/infer/infer.py`.
+
+- **Single inference** — converts one audio file at a time. Use this for quick tests and fine-tuning your settings before a larger run.
+- **Batch inference** — converts every compatible audio file in an input folder and writes the results to an output folder. Supported extensions include `wav`, `mp3`, `flac`, `ogg`, `opus`, `m4a`, `aac`, `alac`, `wma`, `aiff`, `webm`, and `ac3`.
+
+<Note>
+Model files (`.pth`) and index files (`.index`) are expected to live inside `logs/<model_name>/`. When you select a model in the UI, Applio automatically attempts to locate the matching index file using a fuzzy folder/name matching algorithm.
+</Note>
+
+## Parameters
+
+<ParamField path="pitch" type="int" default="0">
+  Shifts the output pitch in semitones. The valid range is **-24 to +24**. Positive values raise the pitch; negative values lower it. For male-to-female conversions, try values between +8 and +12.
+</ParamField>
+
+<ParamField path="f0_method" type="str" default="rmvpe">
+  The pitch extraction algorithm used to compute the F0 contour. Available choices:
+
+  | Value | Notes |
+  |---|---|
+  | `rmvpe` | Recommended default; accurate and fast |
+  | `fcpe` | Fast; good for real-time use |
+  | `crepe` | High quality but slower |
+  | `crepe-tiny` | Lightweight version of crepe |
+  | `hybrid[crepe+rmvpe]` | Blends crepe and rmvpe estimates |
+  | `hybrid[crepe+fcpe]` | Blends crepe and fcpe estimates |
+  | `hybrid[rmvpe+fcpe]` | Blends rmvpe and fcpe estimates |
+  | `hybrid[crepe+rmvpe+fcpe]` | Blends all three estimates |
+
+  Hybrid methods average the F0 curves from each constituent algorithm and can yield smoother results on challenging audio.
+</ParamField>
+
+<ParamField path="index_rate" type="float" default="0.3">
+  Controls how much influence the `.index` file has on the output, on a scale of **0.0 to 1.0**. Higher values push the output closer to the voice characteristics captured in the index. Lower values reduce index influence, which can help when the index introduces audible artefacts.
+</ParamField>
+
+<ParamField path="volume_envelope" type="float" default="1.0">
+  Blends the volume envelope of the converted output on a scale of **0.0 to 1.0**. A value of `1.0` uses the output's own volume envelope entirely. Lower values blend in the original input's envelope, which can be useful for preserving the dynamics of the source recording.
+</ParamField>
+
+<ParamField path="protect" type="float" default="0.33">
+  Protects voiceless consonants and breath sounds from conversion artefacts on a scale of **0.0 to 0.5**. A value of `0.5` provides the strongest protection. Reducing this value may lessen the protection but can also reduce over-indexing side effects.
+</ParamField>
+
+<ParamField path="split_audio" type="bool" default="false">
+  When enabled, Applio splits the input into smaller segments before inference and re-joins them afterwards. This can significantly improve quality on long recordings where silence handling matters.
+</ParamField>
+
+<ParamField path="f0_autotune" type="bool" default="false">
+  Applies a light autotune to the inferred F0 curve, snapping pitches toward the nearest chromatic note. Particularly useful for singing voice conversions where in-tune output is important.
+</ParamField>
+
+<ParamField path="f0_autotune_strength" type="float" default="1.0">
+  Controls how aggressively autotune snaps pitches to the chromatic grid on a scale of **0.0 to 1.0**. A value of `1.0` gives full snapping; lower values allow more natural pitch variation to pass through.
+</ParamField>
+
+<ParamField path="clean_audio" type="bool" default="false">
+  Runs a noise-reduction pass on the output audio using a noisereduce-based algorithm. Recommended for speech conversions where background noise in the input may bleed through.
+</ParamField>
+
+<ParamField path="clean_strength" type="float" default="0.7">
+  Controls the intensity of the noise-reduction pass on a scale of **0.0 to 1.0**. Higher values clean more aggressively but may compress the audio and reduce naturalness.
+</ParamField>
+
+<ParamField path="export_format" type="str" default="WAV">
+  The container format for the output file. Choices: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A`.
+</ParamField>
+
+<ParamField path="embedder_model" type="str" default="contentvec">
+  The speaker-embedding model used to encode the input audio before conversion. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`. The default `contentvec` works well for most voices. Language-specific Hubert models may give better results when training or inferring voices in those languages.
+</ParamField>
+
+<ParamField path="formant_shifting" type="bool" default="false">
+  Enables formant shifting on the input audio before conversion. Formant shifting alters the resonant frequencies of the vocal tract and is especially useful for male-to-female or female-to-male conversions where timbre differences are pronounced.
+</ParamField>
+
+<ParamField path="formant_qfrency" type="float" default="1.0">
+  The quefrency (frequency) parameter for formant shifting. Values above `1.0` shift formants upward; values below `1.0` shift them downward. The slider range in the UI is 0.0 to 16.0.
+</ParamField>
+
+<ParamField path="formant_timbre" type="float" default="1.0">
+  The timbre parameter for formant shifting, which controls the spectral envelope shape. Adjust alongside `formant_qfrency` for natural-sounding formant adjustments.
+</ParamField>
+
+<ParamField path="sid" type="int" default="0">
+  Speaker ID for multi-speaker models. Most community models are single-speaker (ID `0`), but models trained with multiple speakers expose additional IDs here.
+</ParamField>
+
+## CLI — Single File
+
+```bash
+python core.py infer \
+  --input_path assets/audios/my_voice.wav \
+  --output_path assets/audios/my_voice_output.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.3 \
+  --volume_envelope 1.0 \
+  --protect 0.33 \
+  --clean_audio True \
+  --clean_strength 0.7 \
+  --export_format WAV \
+  --embedder_model contentvec
+```
+
+## CLI — Batch Inference
+
+```bash
+python core.py batch_infer \
+  --input_folder assets/audios/batch_input/ \
+  --output_folder assets/audios/batch_output/ \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.3 \
+  --volume_envelope 1.0 \
+  --protect 0.33 \
+  --export_format WAV \
+  --embedder_model contentvec
+```
+
+## Python API
+
+You can call inference directly from Python using `run_infer_script` from `core.py`:
+
+```python
+from core import run_infer_script
+
+message, output_path = run_infer_script(
+    pitch=0,
+    index_rate=0.3,
+    volume_envelope=1.0,
+    protect=0.33,
+    f0_method="rmvpe",
+    input_path="assets/audios/my_voice.wav",
+    output_path="assets/audios/my_voice_output.wav",
+    pth_path="logs/MyModel/MyModel.pth",
+    index_path="logs/MyModel/MyModel.index",
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=True,
+    clean_strength=0.7,
+    export_format="WAV",
+    embedder_model="contentvec",
+    embedder_model_custom=None,
+    formant_shifting=False,
+    formant_qfrency=1.0,
+    formant_timbre=1.0,
+    sid=0,
+)
+
+print(message)       # "File assets/audios/my_voice.wav inferred successfully."
+print(output_path)   # "assets/audios/my_voice_output.wav"
+```
+
+<Tip>
+`run_infer_script` also exposes a full post-processing chain for the output audio, including `reverb`, `chorus`, `distortion`, `compressor`, `delay`, `limiter`, `gain`, `bitcrush`, and `clipping` effects — all disabled by default. Pass `post_process=True` and set the individual effect flags to enable them.
+</Tip>
+
+## Model File Locations
+
+Applio expects trained models to live under `logs/<model_name>/`. A typical model directory looks like:
+
+```
+logs/
+└── MyModel/
+    ├── MyModel.pth       ← model weights
+    └── MyModel.index     ← FAISS feature index
+```
+
+The Gradio UI auto-discovers all `.pth` and `.index` files under the `logs/` tree and populates the dropdowns accordingly. Files prefixed with `G_` or `D_` (discriminator/generator checkpoints from training) are automatically excluded from the model list.

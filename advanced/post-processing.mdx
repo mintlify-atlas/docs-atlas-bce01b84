@@ -1,0 +1,257 @@
+---
+title: "Audio Post-Processing Effects in Applio"
+sidebarTitle: "Post-Processing"
+description: "Apply reverb, chorus, distortion, compressor, delay, bitcrush, limiter, gain, and pitch shift to Applio voice conversion output using the pedalboard library."
+---
+
+Applio includes a built-in audio effects chain that runs immediately after voice conversion, before the output file is written to disk. These effects are powered by [Spotify's `pedalboard` library](https://github.com/spotify/pedalboard), a high-quality Python audio effects processor. Every effect is optional and independently toggled — you can chain as many or as few as you need. Effects are applied in the order they appear in the pipeline: reverb → pitch shift → limiter → gain → distortion → chorus → bitcrush → clipping → compressor → delay.
+
+## Enabling Post-Processing
+
+Post-processing is disabled by default. To activate it, set `post_process=True` in either the Python API or the CLI. Each individual effect also requires its own flag (e.g. `reverb=True`). Setting `post_process=True` without enabling any individual effect flag is a no-op.
+
+<Note>
+  Post-processing is applied to the full converted audio signal. If you use `split_audio=True`, the effects are applied after the segments are merged back together.
+</Note>
+
+## Available Effects
+
+<Accordion title="Reverb" icon="water">
+  Simulates the acoustic reflections of a physical space. Higher room sizes produce longer, more diffuse tails; damping controls how quickly high frequencies decay.
+
+  Enable with `reverb=True`.
+
+  <ParamField path="reverb_room_size" type="float" default="0.5">
+    Size of the simulated room. Range: `0.0` (dry, tight) to `1.0` (large hall). Higher values produce longer reverb tails.
+  </ParamField>
+
+  <ParamField path="reverb_damping" type="float" default="0.5">
+    High-frequency damping applied to the reverb tail. Range: `0.0` to `1.0`. Higher values make the tail sound darker and decay faster.
+  </ParamField>
+
+  <ParamField path="reverb_wet_gain" type="float" default="0.5">
+    Level of the wet (reverberated) signal in the mix. Range: `0.0` to `1.0`.
+  </ParamField>
+
+  <ParamField path="reverb_dry_gain" type="float" default="0.5">
+    Level of the dry (original) signal in the mix. Range: `0.0` to `1.0`. Set to `0.0` for a fully wet signal.
+  </ParamField>
+
+  <ParamField path="reverb_width" type="float" default="0.5">
+    Stereo width of the reverb effect. Range: `0.0` (mono) to `1.0` (full stereo spread).
+  </ParamField>
+
+  <ParamField path="reverb_freeze_mode" type="float" default="0.5">
+    Controls infinite reverb sustain. Range: `0.0` (normal decay) to `1.0` (reverb sustains indefinitely without decaying).
+  </ParamField>
+</Accordion>
+
+<Accordion title="Pitch Shift" icon="arrow-up-arrow-down">
+  Transposes the pitch of the output audio by a fixed number of semitones, independent of the model's pitch parameter. Useful for fine-tuning the final pitch of the converted audio without re-running inference.
+
+  Enable with `pitch_shift=True`.
+
+  <ParamField path="pitch_shift_semitones" type="float" default="0.0">
+    Number of semitones to shift the pitch. Positive values raise the pitch; negative values lower it. For example, `12.0` shifts up one octave.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Limiter" icon="gauge-high">
+  A brickwall limiter that prevents the output from exceeding a set threshold in decibels. Essential for preventing clipping when using effects that increase gain (e.g. reverb, distortion, gain).
+
+  Enable with `limiter=True`.
+
+  <ParamField path="limiter_threshold" type="float" default="-6">
+    Maximum output level in dBFS. Anything above this value is transparently attenuated. A value of `-6` gives 6 dB of headroom below 0 dBFS.
+  </ParamField>
+
+  <ParamField path="limiter_release_time" type="float" default="0.01">
+    Release time in seconds. Controls how quickly the limiter stops attenuating after the signal falls below the threshold. Shorter values sound more responsive; longer values sound smoother.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Gain" icon="volume-high">
+  Applies a fixed gain (amplification or attenuation) in decibels to the output signal. Use in combination with the limiter to boost quiet conversions safely.
+
+  Enable with `gain=True`.
+
+  <ParamField path="gain_db" type="float" default="0.0">
+    Gain to apply in decibels. Positive values amplify; negative values attenuate. For example, `6.0` doubles the amplitude, `-6.0` halves it.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Distortion" icon="waveform-lines">
+  Applies soft-clipping harmonic distortion to the signal. Adds grit and harmonic overtones. At high drive values the output will be heavily saturated.
+
+  Enable with `distortion=True`.
+
+  <ParamField path="distortion_gain" type="float" default="25">
+    Drive amount in dB. Higher values produce heavier distortion. A value around `10`–`20` gives mild saturation; values above `30` produce heavy clipping.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Chorus" icon="circle-nodes">
+  Creates a thick, doubling effect by layering slightly pitch-modulated and time-delayed copies of the signal. Useful for thickening vocal conversions.
+
+  Enable with `chorus=True`.
+
+  <ParamField path="chorus_rate" type="float" default="1.0">
+    Modulation rate in Hz. Controls how fast the pitch oscillates. Lower values create a slow, wide sweep; higher values create a rapid vibrato-like effect.
+  </ParamField>
+
+  <ParamField path="chorus_depth" type="float" default="0.25">
+    Modulation depth as a fraction (`0.0`–`1.0`). Higher values create a more pronounced pitch variation between the original and chorus voices.
+  </ParamField>
+
+  <ParamField path="chorus_center_delay" type="float" default="7">
+    Centre delay time in milliseconds. The average time offset of the chorus copies from the dry signal.
+  </ParamField>
+
+  <ParamField path="chorus_feedback" type="float" default="0.0">
+    Amount of the chorus output fed back into the input (`0.0`–`1.0`). Higher values create a more resonant, metallic effect.
+  </ParamField>
+
+  <ParamField path="chorus_mix" type="float" default="0.5">
+    Wet/dry mix ratio. `0.0` is fully dry; `1.0` is fully wet (chorus only).
+  </ParamField>
+</Accordion>
+
+<Accordion title="Bitcrush" icon="microchip">
+  Reduces the bit depth of the audio to simulate the lo-fi sound of vintage digital samplers or game audio hardware.
+
+  Enable with `bitcrush=True`.
+
+  <ParamField path="bitcrush_bit_depth" type="int" default="8">
+    Target bit depth. Lower values produce more quantization noise and a grittier sound. `8` gives a classic 8-bit character; `4` is extremely degraded.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Clipping" icon="scissors">
+  Hard-clips the audio at a threshold, producing harsh distortion. Unlike the limiter (which attenuates transparently), clipping introduces audible harmonic distortion at the threshold boundary.
+
+  Enable with `clipping=True`.
+
+  <ParamField path="clipping_threshold" type="float" default="-6">
+    Threshold in dBFS at which hard clipping occurs. Any sample exceeding this level is clipped flat. Values closer to `0` allow more signal through before clipping.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Compressor" icon="arrows-to-dot">
+  Reduces the dynamic range of the signal by attenuating loud passages. Useful for evening out volume inconsistencies in the converted voice.
+
+  Enable with `compressor=True`.
+
+  <ParamField path="compressor_threshold" type="float" default="0">
+    Level in dBFS above which compression is applied. Signals below this level pass through unaffected.
+  </ParamField>
+
+  <ParamField path="compressor_ratio" type="float" default="1">
+    Compression ratio (e.g. `4` means 4:1 — for every 4 dB above the threshold, only 1 dB comes through). A ratio of `1` means no compression.
+  </ParamField>
+
+  <ParamField path="compressor_attack" type="float" default="1.0">
+    Attack time in milliseconds. Controls how quickly the compressor reacts when the signal exceeds the threshold. Shorter values clamp transients harder.
+  </ParamField>
+
+  <ParamField path="compressor_release" type="float" default="100">
+    Release time in milliseconds. Controls how quickly the compressor stops compressing after the signal falls below the threshold.
+  </ParamField>
+</Accordion>
+
+<Accordion title="Delay" icon="clock-rotate-left">
+  Adds an echo effect by mixing a time-delayed copy of the signal back into the output. The feedback parameter controls how many echo repeats you hear.
+
+  Enable with `delay=True`.
+
+  <ParamField path="delay_seconds" type="float" default="0.5">
+    Delay time in seconds. For example, `0.5` produces an echo half a second after the original signal.
+  </ParamField>
+
+  <ParamField path="delay_feedback" type="float" default="0.0">
+    Amount of the delayed signal fed back into the delay line (`0.0`–`1.0`). Higher values create multiple repeating echoes. Values approaching `1.0` may cause runaway feedback — use with caution.
+  </ParamField>
+
+  <ParamField path="delay_mix" type="float" default="0.5">
+    Wet/dry mix ratio. `0.0` is the dry signal only; `1.0` is the delayed signal only.
+  </ParamField>
+</Accordion>
+
+## CLI Example
+
+The following example applies reverb and a compressor to the output. All effect flags must be explicitly set to `True`:
+
+```bash
+python core.py infer \
+  --input_path audio/input.wav \
+  --output_path audio/output.wav \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --post_process True \
+  --reverb True \
+  --reverb_room_size 0.6 \
+  --reverb_damping 0.4 \
+  --reverb_wet_gain 0.4 \
+  --reverb_dry_gain 0.6 \
+  --reverb_width 0.8 \
+  --reverb_freeze_mode 0.0 \
+  --compressor True \
+  --compressor_threshold -18 \
+  --compressor_ratio 4 \
+  --compressor_attack 5.0 \
+  --compressor_release 150
+```
+
+## Python API Example
+
+```python
+from core import run_infer_script
+
+message, output_path = run_infer_script(
+    pitch=0,
+    index_rate=0.3,
+    volume_envelope=1.0,
+    protect=0.33,
+    f0_method="rmvpe",
+    input_path="audio/input.wav",
+    output_path="audio/output.wav",
+    pth_path="logs/MyModel/MyModel.pth",
+    index_path="logs/MyModel/MyModel.index",
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=False,
+    clean_strength=0.7,
+    export_format="WAV",
+    embedder_model="contentvec",
+    # --- post-processing ---
+    post_process=True,
+    reverb=True,
+    reverb_room_size=0.6,
+    reverb_damping=0.4,
+    reverb_wet_gain=0.4,
+    reverb_dry_gain=0.6,
+    reverb_width=0.8,
+    reverb_freeze_mode=0.0,
+    compressor=True,
+    compressor_threshold=-18,
+    compressor_ratio=4,
+    compressor_attack=5.0,
+    compressor_release=150,
+    limiter=True,
+    limiter_threshold=-1.0,
+    limiter_release_time=0.05,
+)
+
+print(message)       # "File audio/input.wav inferred successfully."
+print(output_path)   # "audio/output.wav"
+```
+
+<Tip>
+  Stack a compressor followed by a limiter for broadcast-safe output: the compressor tames the dynamics, and the limiter ensures the final peak never exceeds your target ceiling.
+</Tip>
+
+<Warning>
+  Effects are applied in a fixed sequence regardless of the order you specify the flags. If you enable distortion and then a limiter, the limiter will catch any clipping the distortion introduces. Be mindful of gain staging — combining multiple gain-increasing effects without a limiter can produce severely clipped output.
+</Warning>

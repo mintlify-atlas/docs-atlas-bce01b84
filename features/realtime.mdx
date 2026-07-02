@@ -1,0 +1,123 @@
+---
+title: "Real-Time Voice Conversion in Applio"
+sidebarTitle: "Real-Time"
+description: "Convert microphone or system audio to a target voice in real time using Applio's low-latency sounddevice callback pipeline."
+---
+
+Applio's Real-Time tab lets you transform your voice live — whatever you speak into your microphone is continuously captured, converted through the RVC pipeline, and played back through your chosen output device with minimal delay. The system uses `sounddevice` to open an audio stream at 48000 Hz and processes incoming audio in configurable chunks, applying the same pitch extraction, speaker-embedding, and vocoder stages as offline inference. Because the RVC model runs in a tight streaming loop rather than on a static file, a CUDA-capable GPU is strongly recommended; CPU-only operation is possible but will introduce much higher latency and CPU load.
+
+## How Audio Routing Works
+
+<Steps>
+  <Step title="Capture">
+    Audio is captured from the selected **Input Device** (your microphone or a system audio source) at 48000 Hz via a `sounddevice` stream callback. Input gain can be adjusted to prevent clipping or boost a quiet microphone.
+  </Step>
+  <Step title="Buffering">
+    Incoming samples are accumulated into blocks of `chunk_size` milliseconds. An additional `extra_convert_size` seconds of context audio is prepended to each block to give the model enough history for accurate F0 extraction and smooth transitions.
+  </Step>
+  <Step title="RVC Conversion">
+    Each block passes through the RVC pipeline: F0 extraction → speaker embedding → generator synthesis → vocoder. The converted block is overlapped with the previous block using a crossfade of `cross_fade_overlap_size` seconds to prevent audible clicks at block boundaries.
+  </Step>
+  <Step title="Playback">
+    Converted audio is written to the selected **Output Device**. When a virtual audio cable is used as the output device, other applications (Discord, OBS, streaming software) can pick up the converted voice as a microphone input.
+  </Step>
+</Steps>
+
+## Requirements
+
+- **GPU**: A modern NVIDIA GPU with CUDA is strongly recommended. Real-time conversion runs the full RVC pipeline on every audio chunk — typically every 250 ms — which requires sustained GPU throughput that most CPUs cannot match without unacceptable latency.
+- **Audio interface**: A low-latency interface (e.g. ASIO on Windows, CoreAudio on macOS) reduces round-trip delay compared to standard WASAPI or ALSA drivers.
+- **Drivers**: On Windows, ASIO support is available; enable it in the Advanced Audio Settings section and select the appropriate ASIO input/output channels.
+
+<Warning>
+Real-time conversion is significantly more demanding than offline inference. If you experience crackling, dropouts, or stuttering, try increasing `chunk_size`, reducing `extra_convert_size`, or switching to a lighter F0 method such as `fcpe`.
+</Warning>
+
+## Audio Device Settings
+
+Both the **Input** and **Output** device sections expose the following controls:
+
+- **Input Device** — the microphone or audio interface channel you will speak into. Applio lists all devices detected by `sounddevice`.
+- **Output Device** — where the converted voice is sent. Select a virtual audio cable here to route Applio's output to other apps.
+- **Input Gain (%)** — scales the input signal before processing (0–200%). Use this to compensate for a quiet microphone without raising OS-level gain.
+- **Output Gain (%)** — scales the converted output signal before playback (0–200%).
+- **Monitor Device** — optional secondary output where the original (unconverted) input is mirrored for monitoring purposes.
+- **ASIO Channels** — visible only when ASIO mode is active; selects the specific hardware channel to use.
+
+## Model & Conversion Settings
+
+<ParamField path="model_file" type="str" required>
+  Path to the `.pth` model file. Applio auto-discovers all models under `logs/`.
+</ParamField>
+
+<ParamField path="index_file" type="str">
+  Path to the `.index` file. In real-time mode the index rate defaults to `0.0` because index lookups add latency; enable and tune it only if voice accuracy requires it.
+</ParamField>
+
+<ParamField path="pitch" type="int" default="0">
+  Pitch shift in semitones (-24 to +24). Adjust to match the target model's natural register.
+</ParamField>
+
+<ParamField path="f0_method" type="str" default="fcpe">
+  Pitch extraction algorithm. In the real-time tab the default is `fcpe` rather than `rmvpe` because FCPE has a lower per-chunk compute cost, reducing overall latency. Choices: `rmvpe`, `fcpe`, `crepe`, `crepe-tiny`.
+</ParamField>
+
+<ParamField path="index_rate" type="float" default="0.0">
+  Index influence (0.0–1.0). Defaults to `0.0` in real-time mode to avoid the latency overhead of FAISS lookups on every chunk. Increase carefully if you need stronger voice matching.
+</ParamField>
+
+<ParamField path="volume_envelope" type="float" default="1.0">
+  Volume envelope blending (0.0–1.0).
+</ParamField>
+
+<ParamField path="protect" type="float" default="0.33">
+  Consonant and breath sound protection (0.0–0.5).
+</ParamField>
+
+<ParamField path="embedder_model" type="str" default="contentvec">
+  Speaker-embedding model. Must match what the loaded `.pth` model was trained with. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`.
+</ParamField>
+
+## Performance Settings
+
+<ParamField path="chunk_size" type="float" default="250">
+  Audio buffer size in milliseconds (2.7 ms to 2730.7 ms). This is the primary latency knob: smaller values mean lower end-to-end delay but require the GPU to keep up with more frequent, smaller conversions. Start at 250 ms and decrease gradually while monitoring for dropouts.
+</ParamField>
+
+<ParamField path="cross_fade_overlap_size" type="float" default="0.05">
+  Duration in seconds of the crossfade between consecutive converted chunks (0.05–0.20 s). Increasing this smooths transitions but adds a small amount of latency.
+</ParamField>
+
+<ParamField path="extra_convert_size" type="float" default="2.5">
+  Extra audio context in seconds prepended to each chunk before conversion (0.1–5.0 s). Providing more context improves F0 continuity and voice quality, but adds processing overhead. Reduce this first if CPU/GPU load is too high.
+</ParamField>
+
+<ParamField path="silent_threshold" type="float" default="-60">
+  Volume threshold in dB (-90 to -60 dB) below which audio is treated as silence and skipped entirely. Skipping silent frames saves GPU cycles and reduces background noise artefacts.
+</ParamField>
+
+## Latency Reduction Tips
+
+<Tip>
+These settings have the most impact on reducing end-to-end latency, roughly in order of effectiveness:
+
+1. **Lower `chunk_size`** — try 100–150 ms if your GPU is fast enough.
+2. **Use `fcpe` as F0 method** — it is the fastest extractor available in Applio.
+3. **Set `index_rate` to 0** — FAISS lookups add per-chunk overhead.
+4. **Reduce `extra_convert_size`** — try 1.0–1.5 s rather than the default 2.5 s.
+5. **Use an ASIO driver on Windows** — ASIO bypasses the Windows audio mixer for lower round-trip latency.
+6. **Enable `cache_data_in_gpu`** (in training, not inference) — not applicable here, but ensuring your GPU is not shared with other heavy processes helps.
+</Tip>
+
+## Using a Virtual Audio Cable
+
+To route Applio's converted voice output into another application (e.g. Discord, OBS, Zoom, or any streaming software), you need a virtual audio cable — a software-only audio device that loops one application's output into another application's input.
+
+1. Install a virtual cable (e.g. **VB-CABLE** on Windows/macOS, **PulseAudio null sink** on Linux).
+2. In Applio's **Output Device** dropdown, select the virtual cable as the output.
+3. In your target application (e.g. Discord), select the virtual cable as the microphone input.
+4. Start the real-time conversion in Applio — the target application will now receive your converted voice.
+
+<Note>
+The real-time module operates at a fixed internal sample rate of **48000 Hz** (`AUDIO_SAMPLE_RATE` in `rvc/realtime/core.py`). If your audio interface runs at a different native rate, `sounddevice` and the model's internal resampler handle the conversion transparently.
+</Note>

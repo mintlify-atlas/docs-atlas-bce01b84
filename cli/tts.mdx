@@ -1,0 +1,188 @@
+---
+title: "applio tts: Text-to-Speech CLI Command"
+sidebarTitle: "tts"
+description: "Run Applio's TTS pipeline from the command line. Synthesize text with Edge TTS voices then apply RVC voice conversion in a single command."
+---
+
+The `tts` subcommand combines two operations into a single CLI call: it first synthesizes speech from text using Microsoft Edge TTS, saving the raw synthesized audio to `--output_tts_path`, and then immediately passes that audio through Applio's RVC voice-conversion pipeline to produce a final converted output at `--output_rvc_path`. This means you can go from a plain text string to a fully converted voice clip — with all the quality controls available in normal inference — without any manual intermediate steps.
+
+## Two-stage pipeline
+
+<Steps>
+  <Step title="Text-to-speech synthesis">
+    Edge TTS synthesizes the input text using the chosen voice (`--tts_voice`) at the specified rate (`--tts_rate`) and saves the raw audio to `--output_tts_path`.
+  </Step>
+  <Step title="RVC voice conversion">
+    The synthesized audio is passed through the RVC pipeline using the model at `--pth_path` and index at `--index_path`. The converted audio is saved to `--output_rvc_path`.
+  </Step>
+</Steps>
+
+<Note>
+  `--tts_text` and `--tts_file` are both listed as required by the argument parser; provide the text directly in `--tts_text` and supply the path to a `.txt` file in `--tts_file`. If you only have one source, supply the same value to both or an empty string for the one you do not use — the underlying TTS script decides which to prefer at runtime.
+</Note>
+
+---
+
+## Flags
+
+### Text input
+
+<ParamField path="--tts_text" type="string" required>
+  The text string to synthesize. Enclose in quotes when passing on the command line. For long or multi-line content, use `--tts_file` instead.
+</ParamField>
+
+<ParamField path="--tts_file" type="string" required>
+  Path to a plain-text file whose contents will be synthesized. Use this for long scripts or multi-line text.
+</ParamField>
+
+### Voice and rate
+
+<ParamField path="--tts_voice" type="string" required>
+  Edge TTS voice short name to use for synthesis (e.g., `en-US-AriaNeural`, `en-GB-SoniaNeural`, `es-ES-ElviraNeural`). The full list of available voices is loaded from `rvc/lib/tools/tts_voices.json`; the relevant field is `ShortName`.
+</ParamField>
+
+<ParamField path="--tts_rate" type="integer" default="0">
+  Speaking rate adjustment. Range: `-100` (much slower) to `100` (much faster). A value of `0` uses the voice's natural speaking rate.
+</ParamField>
+
+### Output paths
+
+<ParamField path="--output_tts_path" type="string" required>
+  Full path where the raw Edge TTS audio will be saved before voice conversion. The file will be overwritten if it already exists inside the `assets/` directory.
+</ParamField>
+
+<ParamField path="--output_rvc_path" type="string" required>
+  Full path where the final RVC-converted audio will be saved.
+</ParamField>
+
+### Model paths
+
+<ParamField path="--pth_path" type="string" required>
+  Full path to the trained RVC model file (`.pth`).
+</ParamField>
+
+<ParamField path="--index_path" type="string" required>
+  Full path to the FAISS index file (`.index`) that accompanies the model.
+</ParamField>
+
+### Voice conversion settings
+
+<ParamField path="--pitch" type="integer" default="0">
+  Pitch shift in semitones applied during RVC conversion. Range: `-24` to `24`. Useful for adapting a model trained on a different pitch register to the TTS voice's natural pitch range.
+</ParamField>
+
+<ParamField path="--index_rate" type="float" default="0.3">
+  Influence of the FAISS index on the conversion output. Range: `0.0`–`1.0`. Higher values bring the output closer to the training voice; lower values reduce artifacts.
+</ParamField>
+
+<ParamField path="--volume_envelope" type="float" default="1.0">
+  Blends the output's volume envelope with the input's. Range: `0.0`–`1.0`. A value of `1.0` uses the output envelope fully.
+</ParamField>
+
+<ParamField path="--protect" type="float" default="0.33">
+  Protects consonants and breathing sounds from conversion artifacts. Range: `0.0`–`0.5`.
+</ParamField>
+
+<ParamField path="--f0_method" type="string" default="rmvpe">
+  Pitch-extraction algorithm for RVC conversion. Choices: `crepe`, `crepe-tiny`, `rmvpe`, `fcpe`, `hybrid[crepe+rmvpe]`, `hybrid[crepe+fcpe]`, `hybrid[rmvpe+fcpe]`, `hybrid[crepe+rmvpe+fcpe]`. `rmvpe` is recommended for most TTS voices.
+</ParamField>
+
+<ParamField path="--split_audio" type="boolean" default="False">
+  Split the synthesized TTS audio into smaller segments before RVC conversion. Recommended for long TTS outputs. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--f0_autotune" type="boolean" default="False">
+  Apply a light autotune to the RVC-converted output. Can help with TTS-to-singing use cases. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--f0_autotune_strength" type="float" default="1.0">
+  Strength of the autotune snap to the chromatic grid. Range: `0.0`–`1.0`. Only active when `--f0_autotune True`.
+</ParamField>
+
+<ParamField path="--proposed_pitch" type="boolean" default="False">
+  Enable proposed pitch adjustment mode during conversion. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--proposed_pitch_threshold" type="float" default="155.0">
+  Threshold frequency (Hz) for proposed pitch adjustment. Range: `100`–`499`. Only active when `--proposed_pitch True`.
+</ParamField>
+
+<ParamField path="--clean_audio" type="boolean" default="False">
+  Run noise reduction on the converted output. Recommended for cleaner TTS results. Accepts `True` or `False`.
+</ParamField>
+
+<ParamField path="--clean_strength" type="float" default="0.7">
+  Intensity of the noise-reduction pass. Range: `0.0`–`1.0`. Only active when `--clean_audio True`.
+</ParamField>
+
+<ParamField path="--export_format" type="string" default="WAV">
+  Output file format for the final converted audio. Choices: `WAV`, `MP3`, `FLAC`, `OGG`, `M4A`.
+</ParamField>
+
+<ParamField path="--embedder_model" type="string" default="contentvec">
+  Speaker-embedding model used during RVC conversion. Choices: `contentvec`, `spin`, `spin-v2`, `chinese-hubert-base`, `japanese-hubert-base`, `korean-hubert-base`, `custom`.
+</ParamField>
+
+<ParamField path="--embedder_model_custom" type="string" default="None">
+  Path to a custom embedding model. Only used when `--embedder_model custom`.
+</ParamField>
+
+<ParamField path="--sid" type="integer" default="0">
+  Speaker ID for multi-speaker models. Set to `0` for single-speaker models.
+</ParamField>
+
+---
+
+## Usage example
+
+```bash
+python core.py tts \
+  --tts_text "Welcome to Applio voice conversion." \
+  --tts_file "" \
+  --tts_voice en-US-JennyNeural \
+  --tts_rate 0 \
+  --pth_path logs/MyModel/MyModel.pth \
+  --index_path logs/MyModel/MyModel.index \
+  --output_tts_path assets/tts_out.wav \
+  --output_rvc_path assets/final_out.wav \
+  --pitch 0 \
+  --f0_method rmvpe \
+  --index_rate 0.3 \
+  --clean_audio True \
+  --export_format WAV
+```
+
+---
+
+## Finding available voices
+
+Applio loads its voice list from `rvc/lib/tools/tts_voices.json`. Each entry in the file represents one Edge TTS voice. The value you pass to `--tts_voice` must match the `ShortName` field exactly, including capitalization.
+
+```bash
+# Print all available voice short names
+python -c "
+import json
+with open('rvc/lib/tools/tts_voices.json') as f:
+    voices = json.load(f)
+for v in sorted({v['ShortName'] for v in voices}):
+    print(v)
+"
+```
+
+Some commonly used voices:
+
+| Short name | Language | Gender |
+|---|---|---|
+| `en-US-AriaNeural` | English (US) | Female |
+| `en-US-JennyNeural` | English (US) | Female |
+| `en-US-GuyNeural` | English (US) | Male |
+| `en-GB-SoniaNeural` | English (UK) | Female |
+| `es-ES-ElviraNeural` | Spanish (Spain) | Female |
+| `fr-FR-DeniseNeural` | French | Female |
+| `de-DE-KatjaNeural` | German | Female |
+| `ja-JP-NanamiNeural` | Japanese | Female |
+| `zh-CN-XiaoxiaoNeural` | Chinese (Mandarin) | Female |
+
+<Tip>
+  The full Edge TTS voice catalog — including regional variants and styles — can be browsed at the [Microsoft TTS voice gallery](https://speech.microsoft.com/portal/voicegallery). Match the `ShortName` value shown there to what you pass to `--tts_voice`.
+</Tip>

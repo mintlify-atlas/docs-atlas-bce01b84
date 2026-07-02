@@ -1,0 +1,194 @@
+---
+title: "Speaker Embedder Models for RVC Voice Conversion"
+sidebarTitle: "Embedder Models"
+description: "Choose the right speaker embedder model for Applio RVC inference. Compare contentvec, spin, spin-v2, multilingual HuBERT variants, and custom embedders."
+---
+
+Every RVC voice conversion begins by extracting a speaker-independent content representation from the input audio. This is the job of the **embedder model** — a self-supervised speech model (typically a HuBERT variant) that encodes the linguistic content of the source audio while suppressing speaker identity. The resulting embedding is then fed into the RVC synthesizer alongside the target speaker's learned features from the `.pth` model file. Choosing the right embedder is critical: the embedder used at inference must match the one used when the model was trained, or the voice conversion quality will degrade noticeably.
+
+## Available Embedder Models
+
+Applio ships with six built-in embedder options and the ability to load a custom model from disk.
+
+<Accordion title="contentvec (default)" icon="star">
+  The original HuBERT-based content encoder used by the vast majority of publicly released RVC models. `contentvec` was trained on English speech and generalises well across languages, making it the safe default for any model whose training embedder is unknown.
+
+  **Best for:** General-purpose voice conversion; any model downloaded from the community.
+
+  **CLI value:** `contentvec`
+</Accordion>
+
+<Accordion title="spin" icon="rotate">
+  SPIN (Self-supervised Pitch-Invariant Network) is an alternative speech representation model designed to be more robust to pitch variation than standard HuBERT models. It can improve naturalness for certain voices, particularly in singing scenarios.
+
+  **Best for:** Models explicitly trained with the `spin` embedder.
+
+  **CLI value:** `spin`
+</Accordion>
+
+<Accordion title="spin-v2" icon="rotate">
+  The second iteration of SPIN, with refined training and improved content disentanglement compared to the original. Use `spin-v2` when the target model was trained with `spin-v2`.
+
+  **Best for:** Models explicitly trained with the `spin-v2` embedder.
+
+  **CLI value:** `spin-v2`
+</Accordion>
+
+<Accordion title="chinese-hubert-base" icon="language">
+  A HuBERT model fine-tuned on Mandarin Chinese speech data. It captures phonetic distinctions in Chinese more accurately than `contentvec`, which was primarily trained on English.
+
+  **Best for:** Models trained on Mandarin Chinese speech data, or when converting Mandarin Chinese source audio into a Mandarin Chinese target voice.
+
+  **CLI value:** `chinese-hubert-base`
+</Accordion>
+
+<Accordion title="japanese-hubert-base" icon="language">
+  A HuBERT model fine-tuned on Japanese speech data. Japanese phonology (morae, pitch accent, geminate consonants) benefits from a model specifically trained on Japanese audio.
+
+  **Best for:** Models trained on Japanese speech.
+
+  **CLI value:** `japanese-hubert-base`
+</Accordion>
+
+<Accordion title="korean-hubert-base" icon="language">
+  A HuBERT model fine-tuned on Korean speech data.
+
+  **Best for:** Models trained on Korean speech.
+
+  **CLI value:** `korean-hubert-base`
+</Accordion>
+
+<Accordion title="custom" icon="folder-open">
+  Load any compatible HuBERT-architecture model from a local directory on disk. The custom model path is passed separately via `--embedder_model_custom`.
+
+  **Best for:** Experimental or proprietary embedder models not included in the Applio distribution.
+
+  **CLI value:** `custom`
+
+  See [Custom Embedder Usage](#custom-embedder-usage) below for details.
+</Accordion>
+
+## How to Choose the Right Embedder
+
+<Steps>
+  <Step title="Check the model's metadata">
+    Run the `model_information` command to inspect the training metadata embedded in the `.pth` file. This will tell you which embedder was used during training:
+
+    ```bash
+    python core.py model_information --pth_path logs/MyModel/MyModel.pth
+    ```
+
+    Look for the `embedder_model` field in the output.
+  </Step>
+
+  <Step title="Match the training embedder">
+    Set `--embedder_model` to exactly the same value that was used during training. If the metadata does not specify an embedder, assume `contentvec` — it is the historical default for RVC models.
+  </Step>
+
+  <Step title="Test and compare">
+    If you are unsure or experimenting with a new model, run a short inference clip with `contentvec` and your candidate embedder, then compare the outputs. Mismatched embedders typically produce buzzing artifacts, unnatural consonants, or heavily degraded speech intelligibility.
+  </Step>
+</Steps>
+
+<Warning>
+  Using a mismatched embedder is one of the most common causes of poor voice conversion quality. A model trained with `japanese-hubert-base` will produce degraded results when run with `contentvec`, even if both models share the same architecture.
+</Warning>
+
+## Custom Embedder Usage
+
+To use a model that is not included in Applio's built-in set:
+
+<Steps>
+  <Step title="Place your model files">
+    Copy your custom embedder's model files into the custom embedder directory:
+
+    ```
+    rvc/models/embedders/embedders_custom/
+    ```
+
+    The directory should contain the model weights and any required configuration files expected by the HuBERT loading code.
+  </Step>
+
+  <Step title="Set the embedder flags">
+    Pass `custom` as the embedder model and provide the path to your model:
+
+    ```bash
+    python core.py infer \
+      --embedder_model custom \
+      --embedder_model_custom rvc/models/embedders/embedders_custom/my_model \
+      --input_path audio/input.wav \
+      --output_path audio/output.wav \
+      --pth_path logs/MyModel/MyModel.pth \
+      --index_path logs/MyModel/MyModel.index
+    ```
+  </Step>
+</Steps>
+
+## CLI Example — Language-Specific Embedder
+
+```bash
+python core.py infer \
+  --embedder_model japanese-hubert-base \
+  --input_path audio/input.wav \
+  --output_path audio/output.wav \
+  --pth_path logs/JapaneseModel/model.pth \
+  --index_path logs/JapaneseModel/model.index
+```
+
+## Python API Example
+
+```python
+from core import run_infer_script
+
+# Using a language-specific embedder
+message, output_path = run_infer_script(
+    pitch=0,
+    index_rate=0.3,
+    volume_envelope=1.0,
+    protect=0.33,
+    f0_method="rmvpe",
+    input_path="audio/input.wav",
+    output_path="audio/output.wav",
+    pth_path="logs/JapaneseModel/model.pth",
+    index_path="logs/JapaneseModel/model.index",
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=False,
+    clean_strength=0.7,
+    export_format="WAV",
+    embedder_model="japanese-hubert-base",
+    post_process=False,
+)
+
+# Using a custom embedder
+message, output_path = run_infer_script(
+    # ... other params ...
+    pitch=0,
+    index_rate=0.3,
+    volume_envelope=1.0,
+    protect=0.33,
+    f0_method="rmvpe",
+    input_path="audio/input.wav",
+    output_path="audio/custom_output.wav",
+    pth_path="logs/MyModel/MyModel.pth",
+    index_path="logs/MyModel/MyModel.index",
+    split_audio=False,
+    f0_autotune=False,
+    f0_autotune_strength=1.0,
+    proposed_pitch=False,
+    proposed_pitch_threshold=155.0,
+    clean_audio=False,
+    clean_strength=0.7,
+    export_format="WAV",
+    embedder_model="custom",
+    embedder_model_custom="rvc/models/embedders/embedders_custom/my_model",
+    post_process=False,
+)
+```
+
+<Tip>
+  If you are training your own RVC model, record which embedder you use during the feature extraction step (`run_extract_script`). Share that information alongside your `.pth` and `.index` files so that others can use the correct embedder at inference time.
+</Tip>

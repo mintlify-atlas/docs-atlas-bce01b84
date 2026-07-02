@@ -1,0 +1,276 @@
+---
+title: "Configure Applio Settings and Preferences"
+sidebarTitle: "Configuration"
+description: "Customize Applio's language, precision, theme, author tag, and Discord presence via the Settings tab or by editing the config.json file directly."
+---
+
+Applio stores all user preferences in a single JSON file — `assets/config.json` — that is created automatically from `assets/config_template.json` the first time the application starts. Every option exposed in the **Settings** tab of the Gradio UI writes back to this file in real time, so your preferences persist across restarts without any manual editing. You can also edit the file directly with any text editor while Applio is not running, which is useful for scripted deployments or headless environments.
+
+## Configuration File
+
+**Location:** `assets/config.json` (relative to the Applio working directory)
+
+On first launch, `app.py` checks for the file and copies the template if it is missing:
+
+```python
+if not os.path.exists(CONFIG_PATH):
+    print("Config file not found. Creating fresh from template.")
+    shutil.copy(CONFIG_TEMPLATE_PATH, CONFIG_PATH)
+```
+
+The default `config_template.json` ships with these values:
+
+```json
+{
+  "theme": {
+    "file": "Applio.py",
+    "class": "Applio"
+  },
+  "plugins": [],
+  "discord_presence": true,
+  "lang": {
+    "override": false,
+    "selected_lang": "en_US"
+  },
+  "version": "3.6.3",
+  "model_author": "None",
+  "precision": "fp16",
+  "realtime": {
+    "input_device": "",
+    "output_device": "",
+    "monitor_device": "",
+    "model_file": "",
+    "index_file": "",
+    "client_input_device": "",
+    "client_output_device": "",
+    "client_monitor_device": ""
+  }
+}
+```
+
+<Note>
+  Changes made through the Settings tab are written to `assets/config.json` immediately. If you edit the file directly, restart Applio for the changes to take effect in the running UI.
+</Note>
+
+## Settings Tab
+
+All settings below are accessible from the **Settings** tab in the Gradio UI. Each section corresponds to a dedicated panel within that tab.
+
+### Language
+
+**Config key:** `lang`
+
+Applio supports 60 locales. By default the UI language is detected automatically from your operating system. You can override this to a specific locale using the Language dropdown:
+
+```json
+"lang": {
+  "override": true,
+  "selected_lang": "es_ES"
+}
+```
+
+When `override` is `false`, the system locale is used and `selected_lang` is ignored. Set `override` to `true` to lock the language to any of the available locale codes.
+
+**Available locales include:** `af_AF`, `am_AM`, `ar_AR`, `az_AZ`, `ba_BA`, `be_BE`, `bn_BN`, `bs_BS`, `ca_CA`, `ceb_CEB`, `cs_CS`, `de_DE`, `el_EL`, `en_US`, `es_ES`, `eu_EU`, `fa_FA`, `fr_FR`, `hi_IN`, `hr_HR`, `hu_HU`, `id_ID`, `it_IT`, `ja_JA`, `ko_KO`, `nl_NL`, `pl_PL`, `pt_BR`, `pt_PT`, `ro_RO`, `ru_RU`, `tr_TR`, `uk_UK`, `vi_VI`, `zh_CN`, and more.
+
+<Note>
+  A language change requires restarting Applio to take effect. The Settings tab will show an info banner reminding you after you select a new locale.
+</Note>
+
+### Precision
+
+**Config key:** `precision`
+
+Controls the floating-point precision used during both training and inference. Applio supports three modes:
+
+| Value | Description |
+|-------|-------------|
+| `fp16` | Half precision — faster on most modern GPUs, lower VRAM usage (default) |
+| `fp32` | Full precision — more numerically stable, higher VRAM usage |
+| `bf16` | Brain float 16 — efficient on Ampere and newer NVIDIA GPUs, Google TPUs |
+
+```json
+"precision": "fp16"
+```
+
+<Tip>
+  `fp16` is the recommended default for NVIDIA RTX series GPUs. Use `fp32` if you encounter NaN losses or instability during training. `bf16` is well-suited for A100 and H100 hardware.
+</Tip>
+
+### Theme
+
+**Config key:** `theme`
+
+Applio's Gradio UI theme is fully customizable. The `theme` object stores both the local Python file (`file`) and the class name or Hugging Face theme ID (`class`):
+
+```json
+"theme": {
+  "file": "Applio.py",
+  "class": "Applio"
+}
+```
+
+When you select a theme from the dropdown, Applio checks whether a matching `.py` file exists in `assets/themes/`. If it does, the local theme class is loaded. If not, the value is treated as a Hugging Face Hub theme ID and loaded directly by Gradio.
+
+**Built-in theme:** `Applio` (defined in `assets/themes/Applio.py`)
+
+**Example community themes from `theme_list.json`:**
+
+| Theme ID | Style |
+|----------|-------|
+| `ParityError/Interstellar` | Dark space (Applio fallback default) |
+| `gradio/dracula_revamped` | Dracula dark |
+| `gradio/soft` | Light soft |
+| `gradio/monochrome` | Minimalist monochrome |
+| `gradio/seafoam` | Teal/seafoam |
+| `gradio/glass` | Glassmorphism |
+| `Taithrah/Minimal` | Clean minimal |
+| `ParityError/Anime` | Anime-inspired |
+| `rawrsor1/Everforest` | Nature green |
+| `step-3-profit/Midnight-Deep` | Deep midnight dark |
+
+<Note>
+  Theme changes require restarting Applio. After selecting a new theme from the dropdown, use the **Restart Applio** button in the Settings tab or restart the process manually.
+</Note>
+
+### Model Author
+
+**Config key:** `model_author`
+
+A free-text name that gets embedded into the metadata of every voice model you train. This tag identifies you as the creator when models are shared publicly.
+
+```json
+"model_author": "YourName"
+```
+
+Set it via the **Model Author Name** text field in Settings and click **Set name**. The value is written to `config.json` immediately.
+
+### Discord Presence
+
+**Config key:** `discord_presence`
+
+When enabled, Applio connects to Discord's Rich Presence API and displays your current Applio activity (inference, training, etc.) on your Discord profile.
+
+```json
+"discord_presence": true
+```
+
+Toggle this on or off with the checkbox in Settings. The change takes effect immediately — no restart required. Disabling it calls `RPCManager.stop_presence()` and the Discord status clears within a few seconds.
+
+<Note>
+  Discord Rich Presence requires the Discord desktop app to be running on the same machine. It has no effect in headless or Docker environments unless Discord is also running inside the container.
+</Note>
+
+### Filter
+
+**Config key:** `model_index_filter`
+
+Adds a keyword search filter to the model and index selection dropdowns in the **Inference** and **TTS** tabs. Useful when your `logs/` directory contains many models.
+
+```json
+"model_index_filter": true
+```
+
+Toggle it with the checkbox in Settings. The change takes effect immediately without a restart.
+
+### Realtime Audio
+
+**Config key:** `realtime`
+
+Configures default audio devices and settings for the **Realtime** voice conversion tab. The full set of keys:
+
+```json
+"realtime": {
+  "input_device": "",
+  "output_device": "",
+  "monitor_device": "",
+  "model_file": "",
+  "index_file": "",
+  "client_input_device": "",
+  "client_output_device": "",
+  "client_monitor_device": "",
+  "asio_enabled": false,
+  "audio_sample_rate": 48000
+}
+```
+
+| Key | Description |
+|-----|-------------|
+| `input_device` | Default microphone / audio input device |
+| `output_device` | Default audio output / playback device |
+| `monitor_device` | Default monitoring device |
+| `model_file` | Pre-selected voice model path for realtime |
+| `index_file` | Pre-selected feature index path for realtime |
+| `asio_enabled` | Enable ASIO driver support (Windows only; requires restart) |
+| `audio_sample_rate` | Streaming sample rate: `44100`, `48000`, `88200`, `96000`, `176400`, or `192000` |
+
+<Warning>
+  ASIO support is only available on Windows. The ASIO toggle and sample rate dropdown are hidden on macOS and Linux.
+</Warning>
+
+### Restart
+
+The **Restart Applio** button in the Settings tab calls `os.execl()` to replace the current Python process with a fresh one, applying any pending configuration changes (language, theme, etc.) without needing to close and relaunch manually.
+
+### Version
+
+The **Version Checker** panel in Settings queries the latest release and compares it to the running version stored in `config.json` under the `version` key. Click **Check for updates** to run the comparison and see whether an update is available.
+
+## Server Launch Options
+
+`app.py` accepts command-line flags that control how the Gradio server binds to the network. These are separate from `config.json` and must be passed at startup:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--server-name` | `127.0.0.1` | Interface address the server listens on |
+| `--port` | `6969` | TCP port for the Gradio UI |
+| `--share` | _(not set)_ | Create a public Gradio share link |
+| `--open` | _(not set)_ | Automatically open the UI in the default browser |
+| `--client` | _(not set)_ | Launch in client mode with the realtime FastAPI backend mounted at `/api` |
+
+**Examples:**
+
+```bash
+# Default local-only access
+python app.py
+
+# Listen on all interfaces (required for Docker / remote access)
+python app.py --server-name 0.0.0.0
+
+# Custom port
+python app.py --server-name 0.0.0.0 --port 8080
+
+# Create a public Gradio tunnel
+python app.py --share
+```
+
+<Note>
+  If the requested port is already in use, Applio automatically retries on the next lower port, up to **10 attempts** (`MAX_PORT_ATTEMPTS = 10`). For example, if port `6969` is taken it will try `6968`, `6967`, and so on. A message is printed to the console for each failed attempt.
+</Note>
+
+## Direct config.json Editing
+
+You can bypass the Settings UI entirely and edit `assets/config.json` with a text editor. This is particularly useful for:
+
+- Scripted or automated deployments
+- Setting options not yet exposed in the UI (e.g. pre-configuring realtime device names)
+- Applying the same configuration across multiple Applio instances
+
+<Steps>
+  <Step title="Stop Applio">
+    Shut down the running Applio process to avoid race conditions on the file.
+  </Step>
+  <Step title="Edit the file">
+    Open `assets/config.json` in any text editor and make your changes. The file must remain valid JSON.
+  </Step>
+  <Step title="Restart Applio">
+    Start Applio again. The new configuration will be loaded on startup.
+    ```bash
+    python app.py
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  If `assets/config.json` contains invalid JSON, Applio will fail to start. Keep a backup copy of a working configuration before making manual edits.
+</Warning>

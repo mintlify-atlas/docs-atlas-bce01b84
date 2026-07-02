@@ -1,0 +1,95 @@
+---
+title: "Applio: Open-Source Voice Conversion with RVC"
+sidebarTitle: "Introduction"
+description: "Applio is an open-source voice conversion platform built on RVC. Learn what it is, who it's for, and how it compares to other tools."
+---
+
+Applio is a powerful, open-source voice conversion tool built on top of the Retrieval-Based Voice Conversion (RVC) architecture. Designed with a focus on simplicity, quality, and performance, it offers a complete platform for transforming one voice to sound like another — whether you're producing music, building voice-driven applications, or conducting academic research. Its flexible architecture supports a Gradio web UI, a Python CLI, a Python API, and a first-party plugin system, making it accessible to both non-technical users and experienced developers alike.
+
+## Who Is Applio For?
+
+Applio is designed to serve a broad range of users with different goals and technical backgrounds.
+
+<CardGroup cols={2}>
+  <Card title="Artists & Creators" icon="music">
+    Convert singing or spoken-word audio to a target voice model. Apply autotune, formant shifting, and a full post-processing effects chain (reverb, chorus, compressor, and more) to finalize your output without leaving the app.
+  </Card>
+  <Card title="Developers" icon="code">
+    Drive voice conversion programmatically through `core.py` or by importing the `VoiceConverter` class directly. Automate batch inference, integrate TTS pipelines, and extend functionality with the plugin system.
+  </Card>
+  <Card title="Researchers" icon="flask">
+    Train custom RVC models on your own datasets using the built-in preprocess → extract → train pipeline. Monitor training in real time with the integrated TensorBoard launcher and experiment with multiple vocoder backends (HiFi-GAN, MRF HiFi-GAN, RefineGAN).
+  </Card>
+  <Card title="Enthusiasts" icon="star">
+    Get started instantly with the one-click installer scripts, download community models from the built-in Download tab, and explore the hosted [Applio Playground](https://applio.org/playground) or Google Colab notebooks — no local setup required.
+  </Card>
+</CardGroup>
+
+## Core Components
+
+Applio is organized into several discrete components that you can use independently or together.
+
+**Gradio Web UI (`app.py`)** — The primary interface for most users. It exposes every Applio capability through a tabbed browser-based application that runs locally on `http://127.0.0.1:6969`. Tabs include Inference, Train, TTS, Download, Extra, Voice Blender, Plugins, Realtime, and Settings.
+
+**Python CLI (`core.py`)** — A fully-featured command-line interface that mirrors the capabilities of the web UI. Every inference parameter, training stage, and utility function (model download, audio analysis, TensorBoard, model blending) is available as a subcommand.
+
+**Python API** — The `VoiceConverter` class (`rvc/infer/infer.py`) can be imported directly into your own Python scripts for programmatic voice conversion, including batch inference and TTS-to-RVC pipelines.
+
+**Plugin System** — Applio supports first-party and community plugins hosted at [github.com/IAHispano/Applio-Plugins](https://github.com/IAHispano/Applio-Plugins). Plugins extend the UI with additional tabs and functionality without modifying core source files.
+
+## Architecture Overview
+
+A voice conversion in Applio involves four primary pieces working together:
+
+| Component | Role |
+|---|---|
+| **RVC model (`.pth`)** | The trained neural network weights that encode a target speaker's voice characteristics |
+| **Index file (`.index`)** | A FAISS index of feature vectors extracted during training; controls how closely the output matches the target voice |
+| **Embedder** | Extracts speaker-independent content features from the input audio. Defaults to `contentvec`; alternatives include `spin`, `spin-v2`, and several language-specific HuBERT models |
+| **F0 extractor** | Estimates the fundamental frequency (pitch) of the input. Available methods: `rmvpe` (default), `fcpe`, `crepe`, `crepe-tiny`, and hybrid combinations |
+
+During inference, the embedder encodes the input audio into content features, the F0 extractor produces a pitch contour, and the RVC model decodes both into a waveform that carries the target speaker's timbre. The index file refines this output by retrieving the nearest matching training features, with the `--index_rate` parameter controlling its influence.
+
+## Features at a Glance
+
+<CardGroup cols={2}>
+  <Card title="Multiple F0 Methods" icon="waveform">
+    Choose from `rmvpe`, `fcpe`, `crepe`, `crepe-tiny`, and four hybrid combinations for the pitch extraction algorithm that best fits your audio material.
+  </Card>
+  <Card title="Rich Post-Processing" icon="sliders">
+    Apply a full chain of audio effects after conversion: reverb, chorus, pitch shift, limiter, gain, distortion, bitcrush, clipping, compressor, and delay — all configurable from the UI or CLI.
+  </Card>
+  <Card title="TTS Integration" icon="microphone">
+    Use `edge-tts` to synthesize text with any of hundreds of Microsoft neural voices, then immediately pipe the result through RVC to produce a voice-converted speech output.
+  </Card>
+  <Card title="Model Training Pipeline" icon="chart-line">
+    A complete preprocess → extract → train workflow with overtraining detection, GPU caching, multiple vocoder options, and TensorBoard monitoring built in.
+  </Card>
+  <Card title="Voice Blender" icon="shuffle">
+    Fuse two `.pth` model files at a configurable ratio to create a blended voice that combines characteristics from both source speakers.
+  </Card>
+  <Card title="Realtime Conversion" icon="bolt">
+    A dedicated Realtime tab enables low-latency voice conversion of live microphone input using `sounddevice`.
+  </Card>
+</CardGroup>
+
+## Licensing and Responsible Use
+
+Applio's source code and model weights are released under the [MIT license](https://github.com/IAHispano/Applio/blob/main/LICENSE), which permits modification, redistribution, and commercial use. If you use the official, unmodified version of Applio as distributed in this repository, you must also comply with the [Applio Terms of Use](https://github.com/IAHispano/Applio/blob/main/TERMS_OF_USE.md).
+
+Key responsibilities include:
+
+- Ensure that any audio you process is either owned by you or used with explicit permission from the rights holder.
+- Do not use Applio to create content that defames, harms, or deceives others.
+- Comply with the laws and regulations governing AI and voice transformation tools in your jurisdiction.
+- All officially distributed Applio models were trained on publicly available datasets such as [VCTK](https://huggingface.co/datasets/IAHispano/Applio-Dataset).
+
+For commercial use inquiries, contact [support@applio.org](mailto:support@applio.org). If Applio has been useful to your work, consider supporting its development through a [Ko-fi donation](https://ko-fi.com/iahispano).
+
+## Next Steps
+
+Ready to get Applio running on your machine? Head to the installation guide to set up your environment in a few minutes.
+
+<Card title="Install Applio" icon="download" href="/installation">
+  Step-by-step installation instructions for Windows, Linux, and macOS.
+</Card>
