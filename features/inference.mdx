@@ -92,6 +92,10 @@ Model files (`.pth`) and index files (`.index`) are expected to live inside `log
   The timbre parameter for formant shifting, which controls the spectral envelope shape. Adjust alongside `formant_qfrency` for natural-sounding formant adjustments.
 </ParamField>
 
+<ParamField path="post_process" type="bool" default="false">
+  Master switch that enables the post-processing effects chain. Must be `true` for any individual effect (reverb, chorus, distortion, etc.) to be applied. Each effect is still disabled by default and must be individually enabled even when `post_process` is `true`.
+</ParamField>
+
 <ParamField path="sid" type="int" default="0">
   Speaker ID for multi-speaker models. Most community models are single-speaker (ID `0`), but models trained with multiple speakers expose additional IDs here.
 </ParamField>
@@ -177,7 +181,7 @@ print(output_path)   # "assets/audios/my_voice_output.wav"
 
 Applio expects trained models to live under `logs/<model_name>/`. A typical model directory looks like:
 
-```
+```text
 logs/
 └── MyModel/
     ├── MyModel.pth       ← model weights

@@ -1,7 +1,7 @@
 ---
 title: "Real-Time Voice Conversion in Applio"
 sidebarTitle: "Real-Time"
-description: "Convert microphone or system audio to a target voice in real time using Applio's low-latency sounddevice callback pipeline."
+description: "Convert your microphone or system audio to a target voice in real time using Applio's low-latency sounddevice audio callback pipeline."
 ---
 
 Applio's Real-Time tab lets you transform your voice live — whatever you speak into your microphone is continuously captured, converted through the RVC pipeline, and played back through your chosen output device with minimal delay. The system uses `sounddevice` to open an audio stream at 48000 Hz and processes incoming audio in configurable chunks, applying the same pitch extraction, speaker-embedding, and vocoder stages as offline inference. Because the RVC model runs in a tight streaming loop rather than on a static file, a CUDA-capable GPU is strongly recommended; CPU-only operation is possible but will introduce much higher latency and CPU load.
@@ -119,5 +119,5 @@ To route Applio's converted voice output into another application (e.g. Discord,
 4. Start the real-time conversion in Applio — the target application will now receive your converted voice.
 
 <Note>
-The real-time module operates at a fixed internal sample rate of **48000 Hz** (`AUDIO_SAMPLE_RATE` in `rvc/realtime/core.py`). If your audio interface runs at a different native rate, `sounddevice` and the model's internal resampler handle the conversion transparently.
+The real-time module operates at a fixed internal sample rate of **48000 Hz** (`AUDIO_SAMPLE_RATE` in `rvc/realtime/core.py`). Internally, the conversion loop is managed by the `AudioCallbacks` class from `rvc.realtime.callbacks`, which wires together the `sounddevice` stream, the RVC pipeline, and the optional post-processing effects chain. If your audio interface runs at a different native rate, `sounddevice` and the model's internal resampler handle the conversion transparently.
 </Note>

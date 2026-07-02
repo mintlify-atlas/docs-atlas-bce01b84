@@ -110,7 +110,7 @@ Place your dataset files inside `assets/datasets/<dataset_name>/` so the trainin
   How often (in epochs) to save a training checkpoint. Lower values give you more recovery points but use more disk space.
 </ParamField>
 
-<ParamField path="save_only_latest" type="bool" default="false">
+<ParamField path="save_only_latest" type="bool" default="true">
   When enabled, only the most recent checkpoint is kept, deleting earlier ones to save disk space.
 </ParamField>
 
@@ -118,12 +118,12 @@ Place your dataset files inside `assets/datasets/<dataset_name>/` so the trainin
   When enabled, a standalone `.pth` weights file (suitable for inference) is exported at each checkpoint save, not just the raw training checkpoint.
 </ParamField>
 
-<ParamField path="total_epoch" type="int" default="500">
+<ParamField path="total_epoch" type="int" default="200">
   Total number of training epochs. Typical ranges are 200–800 depending on dataset size and quality. More data generally allows more epochs before overtraining.
 </ParamField>
 
-<ParamField path="batch_size" type="int" default="8">
-  Number of audio segments processed per training step. Larger batch sizes speed up training but require more VRAM. Reduce to `4` or `2` on GPUs with limited memory.
+<ParamField path="batch_size" type="int" default="4">
+  Number of audio segments processed per training step. Larger batch sizes speed up training but require more VRAM. Reduce to `2` on GPUs with limited memory.
 </ParamField>
 
 <ParamField path="overtraining_detector" type="bool" default="false">
@@ -147,7 +147,7 @@ Place your dataset files inside `assets/datasets/<dataset_name>/` so the trainin
 </ParamField>
 
 <ParamField path="vocoder" type="str" default="HiFi-GAN">
-  Vocoder used for audio synthesis during training. `HiFi-GAN` is the standard and only officially supported option in current Applio releases.
+  Vocoder used for audio synthesis during training. Choices: `HiFi-GAN`, `RefineGAN`. `HiFi-GAN` is the default and is compatible with all clients. `RefineGAN` offers superior audio quality but requires the Applio client and matching pretrained weights.
 </ParamField>
 
 ## Stage 4 — Index Parameters
@@ -188,11 +188,11 @@ python core.py extract \
 python core.py train \
   --model_name MyModel \
   --save_every_epoch 10 \
-  --save_only_latest False \
+  --save_only_latest True \
   --save_every_weights True \
-  --total_epoch 500 \
+  --total_epoch 200 \
   --sample_rate 40000 \
-  --batch_size 8 \
+  --batch_size 4 \
   --gpu 0 \
   --overtraining_detector False \
   --overtraining_threshold 50 \
@@ -229,7 +229,7 @@ This opens a local TensorBoard server where you can track generator/discriminato
 
 After a successful training run, you will find the following key files:
 
-```
+```text
 logs/
 └── MyModel/
     ├── MyModel.pth           ← final inference-ready model weights

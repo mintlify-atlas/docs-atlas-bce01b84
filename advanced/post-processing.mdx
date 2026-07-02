@@ -1,7 +1,7 @@
 ---
-title: "Audio Post-Processing Effects in Applio"
+title: "Post-Processing Effects for Applio Voice Conversion"
 sidebarTitle: "Post-Processing"
-description: "Apply reverb, chorus, distortion, compressor, delay, bitcrush, limiter, gain, and pitch shift to Applio voice conversion output using the pedalboard library."
+description: "Apply reverb, chorus, distortion, compressor, delay, bitcrush, limiter, gain, and pitch shift to Applio voice conversion output via the pedalboard library."
 ---
 
 Applio includes a built-in audio effects chain that runs immediately after voice conversion, before the output file is written to disk. These effects are powered by [Spotify's `pedalboard` library](https://github.com/spotify/pedalboard), a high-quality Python audio effects processor. Every effect is optional and independently toggled — you can chain as many or as few as you need. Effects are applied in the order they appear in the pipeline: reverb → pitch shift → limiter → gain → distortion → chorus → bitcrush → clipping → compressor → delay.

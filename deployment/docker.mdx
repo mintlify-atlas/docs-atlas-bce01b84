@@ -1,10 +1,10 @@
 ---
-title: "Deploy Applio with Docker"
+title: "Deploy Applio with Docker Containers"
 sidebarTitle: "Docker"
-description: "Run Applio in a Docker container using the provided Dockerfile or docker-compose. Includes CPU and CUDA GPU configurations, port mapping, and persistent volume setup."
+description: "Run Applio in a Docker container using the CPU Dockerfile or Dockerfile_cuda. Covers port mapping, GPU passthrough, and persistent volume setup."
 ---
 
-Applio ships with two ready-made Dockerfiles that let you run the full Gradio web UI inside an isolated container — no local Python environment required. `Dockerfile` targets generic CPU or GPU hardware using a standard Python 3.12 base image, while `Dockerfile_cuda` is purpose-built for NVIDIA GPUs and pulls directly from the official CUDA 12.8.1 + cuDNN development image. Both variants install system dependencies (ffmpeg, libportaudio2), create an isolated `.venv` virtual environment, install PyTorch, and launch `app.py` bound to `0.0.0.0:6969` so the Gradio UI is reachable from outside the container.
+Applio ships with two ready-made Dockerfiles that let you run the full Gradio web UI inside an isolated container — no local Python environment required. `Dockerfile` is based on `python:3.12-trixie` and installs a CUDA-enabled PyTorch build, making it suitable for systems where the NVIDIA runtime is available via the host driver. `Dockerfile_cuda` is purpose-built for NVIDIA GPUs and pulls directly from the official `nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04` base image, cloning Applio from GitHub at build time. Both variants install system dependencies (ffmpeg, libportaudio2), create an isolated `.venv` virtual environment, install PyTorch, and launch `app.py` bound to `0.0.0.0` so the Gradio UI is reachable from outside the container.
 
 ## Prerequisites
 
@@ -160,11 +160,11 @@ CMD [".venv/bin/python", "app.py", "--server-name", "0.0.0.0"]
 |------|---------|
 | `6969` | Gradio web UI (default) |
 
-Both Dockerfiles `EXPOSE 6969` and pass `--port 6969` to `app.py`. If you need to change the host-side port, adjust the `-p` flag: `-p 8080:6969` maps host port `8080` to container port `6969`.
+Both Dockerfiles `EXPOSE 6969`. The CPU `Dockerfile` passes `--port 6969` explicitly to `app.py`; `Dockerfile_cuda` omits `--port` and relies on the `DEFAULT_PORT = 6969` defined in `app.py`. If you need to change the host-side port, adjust the `-p` flag: `-p 8080:6969` maps host port `8080` to container port `6969`.
 
 ## Persistent Volume — `/app/logs/`
 
-Both Dockerfiles declare `/app/logs/` as a Docker volume. This directory stores:
+The CPU `Dockerfile` declares `/app/logs/` as a Docker volume. `Dockerfile_cuda` does not include a `VOLUME` instruction, so for CUDA-based containers you must supply the mount explicitly via `-v`. This directory stores:
 
 - Trained voice model checkpoints (`.pth` files)
 - Feature index files (`.index` files)
@@ -197,10 +197,17 @@ No additional environment variables are required for a basic deployment. If you 
 
 ## Network Access
 
-The default `CMD` in both Dockerfiles binds Applio to `0.0.0.0`, meaning the server listens on all container network interfaces and is accessible via the mapped host port:
+The `CMD` in both Dockerfiles binds Applio to `0.0.0.0`, meaning the server listens on all container network interfaces and is accessible via the mapped host port. The CPU `Dockerfile` splits the command across `ENTRYPOINT` and `CMD`:
 
 ```dockerfile
+ENTRYPOINT ["python3"]
 CMD ["app.py", "--server-name", "0.0.0.0", "--port", "6969"]
+```
+
+`Dockerfile_cuda` uses a self-contained `CMD` with the venv Python and omits `--port` (defaulting to `6969` via `app.py`):
+
+```dockerfile
+CMD [".venv/bin/python", "app.py", "--server-name", "0.0.0.0"]
 ```
 
 <Tip>

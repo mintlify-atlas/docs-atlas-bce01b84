@@ -1,7 +1,7 @@
 ---
-title: "Speaker Embedder Models for RVC Voice Conversion"
+title: "Applio RVC Speaker Embedder Models and Usage Guide"
 sidebarTitle: "Embedder Models"
-description: "Choose the right speaker embedder model for Applio RVC inference. Compare contentvec, spin, spin-v2, multilingual HuBERT variants, and custom embedders."
+description: "Choose the right speaker embedder for Applio RVC inference. Compare contentvec, spin, spin-v2, multilingual HuBERT variants, and custom embedder models."
 ---
 
 Every RVC voice conversion begins by extracting a speaker-independent content representation from the input audio. This is the job of the **embedder model** — a self-supervised speech model (typically a HuBERT variant) that encodes the linguistic content of the source audio while suppressing speaker identity. The resulting embedding is then fed into the RVC synthesizer alongside the target speaker's learned features from the `.pth` model file. Choosing the right embedder is critical: the embedder used at inference must match the one used when the model was trained, or the voice conversion quality will degrade noticeably.

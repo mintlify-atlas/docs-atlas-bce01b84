@@ -10,13 +10,10 @@ Applio ships with platform-specific installer scripts that handle every step of 
 
 Before installing, make sure your system meets the following baseline requirements:
 
-| Requirement | Recommended |
+| Requirement | Notes |
 |---|---|
 | **Python** | 3.12 (the installer scripts target this version explicitly) |
 | **GPU** | NVIDIA with CUDA 12.8 support (CUDA 11.x is not supported by the default wheel index) |
-| **VRAM** | 4 GB minimum; 8 GB or more recommended for training |
-| **RAM** | 8 GB minimum; 16 GB recommended |
-| **Disk space** | 10 GB free (models and training data add more) |
 | **FFmpeg** | Required for audio encoding and decoding; installed automatically by the scripts |
 
 <Note>
@@ -150,7 +147,7 @@ Before installing, make sure your system meets the following baseline requiremen
 
 ## Docker
 
-A `Dockerfile` and `docker-compose.yaml` are included in the repository for containerized deployments. See the [Docker deployment guide](/deployment/docker) for full instructions.
+A `Dockerfile` and `docker-compose.yaml` are included in the repository for containerized deployments. The Docker image exposes port `6969` and uses Python 3.12 with CUDA 12.8 PyTorch wheels. Note that the Windows installer (`run-install.bat`) deletes these files as part of its cleanup step, so Docker deployments should be performed directly from a repository clone rather than after running the Windows installer.
 
 ## Running Applio
 

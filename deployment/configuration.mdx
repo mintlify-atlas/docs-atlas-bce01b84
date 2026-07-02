@@ -1,7 +1,7 @@
 ---
-title: "Configure Applio Settings and Preferences"
+title: "Applio Configuration Settings and Preferences"
 sidebarTitle: "Configuration"
-description: "Customize Applio's language, precision, theme, author tag, and Discord presence via the Settings tab or by editing the config.json file directly."
+description: "Customize Applio's language, precision, theme, author tag, and Discord presence via the Settings tab or by editing config.json directly."
 ---
 
 Applio stores all user preferences in a single JSON file — `assets/config.json` — that is created automatically from `assets/config_template.json` the first time the application starts. Every option exposed in the **Settings** tab of the Gradio UI writes back to this file in real time, so your preferences persist across restarts without any manual editing. You can also edit the file directly with any text editor while Applio is not running, which is useful for scripted deployments or headless environments.
@@ -177,7 +177,7 @@ Toggle it with the checkbox in Settings. The change takes effect immediately wit
 
 **Config key:** `realtime`
 
-Configures default audio devices and settings for the **Realtime** voice conversion tab. The full set of keys:
+Configures audio device defaults and ASIO settings for the **Realtime** voice conversion tab. The `config_template.json` ships with device fields pre-populated as empty strings:
 
 ```json
 "realtime": {
@@ -188,7 +188,14 @@ Configures default audio devices and settings for the **Realtime** voice convers
   "index_file": "",
   "client_input_device": "",
   "client_output_device": "",
-  "client_monitor_device": "",
+  "client_monitor_device": ""
+}
+```
+
+The Settings tab's **Realtime Audio** section manages two additional keys that are written into the `realtime` object when you interact with those controls (they are not present in the default template):
+
+```json
+"realtime": {
   "asio_enabled": false,
   "audio_sample_rate": 48000
 }

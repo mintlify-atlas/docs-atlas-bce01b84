@@ -1,6 +1,6 @@
 ---
-title: "applio tts: Text-to-Speech CLI Command"
-sidebarTitle: "tts"
+title: "Applio CLI tts: Text-to-Speech with Voice Conversion"
+sidebarTitle: "TTS"
 description: "Run Applio's TTS pipeline from the command line. Synthesize text with Edge TTS voices then apply RVC voice conversion in a single command."
 ---
 
@@ -125,10 +125,6 @@ The `tts` subcommand combines two operations into a single CLI call: it first sy
 
 <ParamField path="--embedder_model_custom" type="string" default="None">
   Path to a custom embedding model. Only used when `--embedder_model custom`.
-</ParamField>
-
-<ParamField path="--sid" type="integer" default="0">
-  Speaker ID for multi-speaker models. Set to `0` for single-speaker models.
 </ParamField>
 
 ---

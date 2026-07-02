@@ -1,14 +1,14 @@
 ---
 title: "Blend Two Voice Models with Applio Voice Blender"
 sidebarTitle: "Voice Blender"
-description: "Fuse two trained RVC models into a single new voice at a configurable blend ratio using Applio's Voice Blender tool."
+description: "Fuse two trained RVC models into a single blended voice at a configurable ratio using Applio's Voice Blender tool. No retraining required."
 ---
 
-The Voice Blender tool lets you fuse two independently trained RVC `.pth` models into a single new model by linearly interpolating their weight tensors at a configurable ratio. The result is a model whose voice characteristics sit somewhere between the two source models — closer to Model A at a low ratio, closer to Model B at a high ratio, and an equal mix at 0.5. This is a quick way to create hybrid voices, smooth out weaknesses of one model with strengths of another, or explore the latent space between two similar voices without retraining from scratch.
+The Voice Blender tool lets you fuse two independently trained RVC `.pth` models into a single new model by linearly interpolating their weight tensors at a configurable ratio. The result is a model whose voice characteristics sit somewhere between the two source models — at a ratio of `1.0` the output is entirely Model 1, at `0.0` it is entirely Model 2, and `0.5` produces an equal mix. This is a quick way to create hybrid voices, smooth out weaknesses of one model with strengths of another, or explore the latent space between two similar voices without retraining from scratch.
 
 Internally, the blending is performed in `rvc/train/process/model_blender.py`. Both checkpoints are loaded to CPU, their weight dictionaries are verified to share the same architecture and sample rate, and each tensor is blended as:
 
-```
+```text
 blended[key] = ratio * model_1[key] + (1 - ratio) * model_2[key]
 ```
 
@@ -31,20 +31,20 @@ Blended models are experimental. The blend ratio is a linear weight interpolatio
 </ParamField>
 
 <ParamField path="pth_path_1" type="str" required>
-  Path to the first source `.pth` model file. At a ratio of `0.0`, the output is essentially this model; at `1.0`, only the second model's weights contribute.
+  Path to the first source `.pth` model file. At a ratio of `1.0`, the output is entirely this model's weights; at `0.0`, none of its weights contribute.
 </ParamField>
 
 <ParamField path="pth_path_2" type="str" required>
-  Path to the second source `.pth` model file. At a ratio of `1.0`, the output is essentially this model.
+  Path to the second source `.pth` model file. At a ratio of `0.0`, the output is entirely this model's weights; at `1.0`, none of its weights contribute.
 </ParamField>
 
 <ParamField path="ratio" type="float" default="0.5">
-  Blend ratio on a scale of **0.0 to 1.0**.
-  - `0.0` → output is 100% Model 1
+  Blend ratio on a scale of **0.0 to 1.0**, accepted in increments of 0.1 via the CLI.
+  - `1.0` → output is 100% Model 1 (weights fully from `pth_path_1`)
   - `0.5` → equal mix of both models
-  - `1.0` → output is 100% Model 2
+  - `0.0` → output is 100% Model 2 (weights fully from `pth_path_2`)
 
-  The ratio is applied element-wise to every weight tensor. For the `emb_g.weight` (speaker embedding) tensor, if the two models have different numbers of speakers, only the minimum number of speaker rows are blended.
+  The blending formula applied element-wise to every weight tensor is `ratio × model_1 + (1 - ratio) × model_2`. For the `emb_g.weight` (speaker embedding) tensor, if the two models have different numbers of speakers, only the minimum number of speaker rows are blended.
 </ParamField>
 
 ## CLI Example
@@ -60,19 +60,19 @@ python core.py model_blender \
 Try different ratios to find the best blend for your use case:
 
 ```bash
-# Lean 70% toward ModelA
+# Lean 70% toward ModelA (ratio 0.7 → 70% from pth_path_1)
 python core.py model_blender \
   --model_name BlendedModel_70A \
   --pth_path_1 logs/ModelA/ModelA.pth \
   --pth_path_2 logs/ModelB/ModelB.pth \
-  --ratio 0.3
+  --ratio 0.7
 
-# Lean 70% toward ModelB
+# Lean 70% toward ModelB (ratio 0.3 → 70% from pth_path_2)
 python core.py model_blender \
   --model_name BlendedModel_70B \
   --pth_path_1 logs/ModelA/ModelA.pth \
   --pth_path_2 logs/ModelB/ModelB.pth \
-  --ratio 0.7
+  --ratio 0.3
 ```
 
 ## Python API
@@ -123,7 +123,7 @@ run_infer_script(
 
 The blended model is saved directly to `logs/<model_name>.pth` (note: at the root of `logs/`, not inside a subdirectory). If you want to use it with the Applio UI alongside an index file, move or copy it into its own folder:
 
-```
+```text
 logs/
 └── BlendedModel/
     └── BlendedModel.pth    ← move here for UI auto-discovery
